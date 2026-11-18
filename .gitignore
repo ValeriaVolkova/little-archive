@@ -1,0 +1,5 @@
+node_modules/
+.artifacts/
+outputs/
+*.tar.gz
+*.zip
