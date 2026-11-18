@@ -1,5 +1,5 @@
 import {encodeImage,decodeImage,encodeDraft,decodeDraft} from './storage-codec.js';
-import {emptyArchive,validateArchive,normalizeCategories} from './domain.js';
+import {emptyArchive,validateArchive} from './domain.js';
 let connection;
 export const clientId=crypto.randomUUID();
 export async function openDB(){
@@ -19,7 +19,7 @@ export async function readArchive(){
     req.onsuccess=()=>resolve(req.result);
     tx.onabort=tx.onerror=()=>reject(tx.error||req.error);
   });
-  return value===undefined?emptyArchive():normalizeCategories(validateArchive(value));
+  return value===undefined?emptyArchive():validateArchive(value,{allowInvalidDates:true});
 }
 export async function readFile(path){const db=await openDB();return new Promise((resolve,reject)=>{const req=db.transaction('files').objectStore('files').get(path);req.onsuccess=()=>{try{req.result?resolve(decodeImage(req.result)):reject(Error('Missing original image'));}catch(error){reject(error);}};req.onerror=()=>reject(req.error);});}
 function findMissingFiles(db,candidates){
@@ -35,7 +35,7 @@ function findMissingFiles(db,candidates){
   });
 }
 export async function commit(state,puts=[],deletes=[],draft=null,missingOriginals=[]){
-  validateArchive(state);
+  validateArchive(state,{allowInvalidDates:true});
   const db=await openDB();
   const encoded=[];for(const [key,blob] of puts)encoded.push([key,await encodeImage(blob)]);
   const repairs=[];

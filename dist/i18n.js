@@ -1,6 +1,17 @@
 export let lang=localStorage.getItem('little-archive-language')||(navigator.language.startsWith('ru')?'ru':'en');
 export const setLanguage=v=>{lang=v;localStorage.setItem('little-archive-language',v);document.documentElement.lang=v;};
 const words={
+home:['Главная','Home'],welcomeFirst:['Сохраните первые рисунки и поделки в семейном архиве.','Save the first drawings and crafts in your family archive.'],
+welcomeFamily:['Здесь растёт история вашего творчества.','This is where your family’s creativity grows.'],
+addFirstChild:['Создать первый профиль','Create the first profile'],tryDemo:['Посмотреть демо','Explore the demo'],
+requiredBirthday:['Дата рождения','Date of birth'],
+addArtwork:['Добавить работу','Add artwork'],firstArtwork:['Добавить первую работу','Add the first artwork'],
+familyChildren:['Дети','Children'],familyWorks:['Работы','Artworks'],familyAlbums:['Альбомы','Albums'],
+ageCollections:['По возрасту','By age'],recentMemories:['Недавние работы','Recent memories'],viewAll:['Смотреть все','View all'],
+openArchive:['Открыть архив','Open archive'],familyFilter:['Все дети','All children'],allAges:['Любой возраст','All ages'],
+uncategorized:['Без категории','No category'],replacePhoto:['Заменить фото','Replace photo'],mediaLibrary:['Медиатека','Photo library'],
+chooseFile:['Выбрать файл','Choose file'],photoSource:['Добавить фото','Add photo'],requiredPhoto:['Нужна одна фотография работы.','Choose one photo for this artwork.'],
+invalidCalendarDate:['Дата неизвестна','Date unavailable'],
 draftReadError:['Некоторые черновики не удалось прочитать. Сохранённые работы остаются доступны.','Some drafts could not be read. Saved artwork remains available.'],
 editPhotosUnavailable:['Не удалось открыть все фотографии работы. Сохранение отключено, чтобы сохранить исходную запись. Если есть резервная копия, попробуйте восстановить её.','Some artwork photos could not be opened. Saving is disabled to protect the existing record. If you have a backup, try restoring it.'],
 saveQuota:['Недостаточно места для сохранения. Не закрывайте форму и не очищайте данные сайта. Освободите место на устройстве и повторите попытку.','Not enough storage. Keep this form open and do not clear site data. Free device space and retry.'],
@@ -22,7 +33,7 @@ subtitle:['Рисунки, поделки и моменты, которые хо
 add:['Добавить работу','Add artwork'],all:['Все работы','All artwork'],favorites:['Избранное','Favorites'],allChildren:['Все дети','All children'],addChild:['Добавить ребёнка','Add child'],
 search:['Найти работу…','Find a little masterpiece…'],anyYear:['Все годы','All years'],anyCategory:['Все категории','All categories'],
 newest:['Сначала новые','Newest first'],oldest:['Сначала старые','Oldest first'],byAge:['По возрасту','By age'],byCategory:['По категории','By category'],
-drawing:['Рисование','Drawing & painting'],painting:['Живопись','Painting'],collage:['Аппликация','Collage'],modeling:['Лепка','Modeling'],craft:['Поделка','Craft'],other:['Другое','Other'],
+drawing:['Рисунок','Drawing'],painting:['Живопись','Painting'],collage:['Аппликация','Collage'],modeling:['Лепка','Modeling'],craft:['Поделка','Craft'],other:['Другое','Other'],
 local:['Хранится на этом устройстве','Saved on this device'],private:['Без аккаунтов и загрузки фото на сервер','No accounts. No photo uploads.'],
 demo:['Демо-коллекция','Demo collection'],demoHint:['Это примеры работ. Создайте свой архив, чтобы сохранить творчество вашего ребёнка.','These are sample artworks. Start your own archive to keep your child’s creations.'],
 start:['Начать свой архив','Start my archive'],empty:['Здесь начинается ваша история','Your story starts here'],emptyHint:['Сохраните первый рисунок. Через несколько лет он станет ещё дороже.','Save their first drawing. One day, it will mean even more.'],
@@ -60,6 +71,11 @@ noAlbum:['Для этого ребёнка пока нет альбомов.','T
 syncNotice:['Архив изменился в другой вкладке. Обновите страницу перед сохранением.','The archive changed in another tab. Reload before saving.']
 };
 export const t=k=>words[k]?.[lang==='ru'?0:1]??k;
-export const dateText=s=>new Intl.DateTimeFormat(lang==='ru'?'ru-RU':'en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(s+'T12:00:00Z'));
+export const dateText=s=>{
+  const date=new Date(s+'T12:00:00Z');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||!Number.isFinite(+date)||date.toISOString().slice(0,10)!==s)return t('invalidCalendarDate');
+  return new Intl.DateTimeFormat(lang==='ru'?'ru-RU':'en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(date);
+};
+export const periodText=n=>lang==='en'?`${n}–${n+1} ${n===0?'year':'years'}`:`${n}–${n+1} ${n===0?'год':n<4?'года':'лет'}`;
 export function countText(n){if(lang==='en')return n+' '+(n===1?'artwork':'artworks');const a=n%10,b=n%100;return n+' '+(a===1&&b!==11?'работа':a>=2&&a<=4&&(b<12||b>14)?'работы':'работ');}
 export function ageText(age){if(!age)return '';if(lang==='en')return [age.years?age.years+' '+(age.years===1?'year':'years'):'',age.months?age.months+' '+(age.months===1?'month':'months'):''].filter(Boolean).join(' ')||'Under 1 month';const n=age.years,a=n%10,b=n%100;return [n?n+' '+(a===1&&b!==11?'год':a>=2&&a<=4&&(b<12||b>14)?'года':'лет'):'',age.months?age.months+' мес.':''].filter(Boolean).join(' ')||'Меньше месяца';}

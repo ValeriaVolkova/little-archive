@@ -1,0 +1,289 @@
+const pages=new URLSearchParams(location.search).has('pages');
+const base=pages?'/little-archive/':'/dist/';
+const {openDB,readArchive,readFile,readDrafts,saveDraft,commit}=await import(base+'db.js');
+const {createBackup,inspectBackup,planRestore}=await import(base+'backup-restore.js');
+const {readZip}=await import(base+'zip.js');
+
+const passed=JSON.parse(sessionStorage.getItem('passed')||'[]');
+const assert=(value,message)=>{if(!value)throw Error(message);};
+const equal=(a,b,message)=>assert(JSON.stringify(a)===JSON.stringify(b),message);
+const bytes=async blob=>[...new Uint8Array(await blob.arrayBuffer())];
+const request=req=>new Promise((resolve,reject)=>{
+  req.onsuccess=()=>resolve(req.result);
+  req.onerror=()=>reject(req.error);
+});
+const change=async(db,stores,callback)=>{
+  const tx=db.transaction(stores,'readwrite');
+  const done=new Promise((resolve,reject)=>{
+    tx.oncomplete=resolve;
+    tx.onabort=()=>reject(tx.error);
+  });
+  callback(tx);
+  await done;
+};
+const originals=['one','two','three'].map(id=>'images/'+id+'/original.png');
+const names=['Old Blob','New bytes'];
+const state={
+  version:1,children:[{id:'aurora',name:'Аврора',birthDate:'2020-03-03',color:'#889900'},
+    {id:'misha',name:'Михаил-Александр-Константинович'.repeat(2),birthDate:'2022-03-03',color:'#557799'}],
+  artworks:names.map((title,i)=>({id:'work-'+i,childId:i?'misha':'aurora',title,notes:'Заметка',
+    artworkDate:'2025-03-03',addedAt:'2025-03-15T09:00:00Z',isFavorite:true,category:'drawing',
+    coverImageId:i?'three':'one'})),
+  images:['one','two','three'].map((id,i)=>({id,artworkId:i===2?'work-1':'work-0',
+    originalPath:originals[i],editedPath:null,width:1,height:1,sortOrder:i===1?1:0})),
+  albums:[{id:'album',title:'Альбом',childId:'aurora',coverStyle:'warm',orderedArtworkIds:['work-0']}]
+};
+const report=body=>fetch('/result',{method:'POST',body:JSON.stringify(body)});
+async function waitFor(find){
+  for(let i=0;i<150;i++){
+    const result=find();
+    if(result)return result;
+    await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  throw Error('Application did not reach the expected state');
+}
+const makeImage=type=>{
+  const canvas=document.createElement('canvas');
+  canvas.width=20;canvas.height=32;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#E96345';ctx.fillRect(0,0,20,32);
+  return new Promise(resolve=>canvas.toBlob(resolve,type));
+};
+const appFrame=()=>{
+  const frame=document.createElement('iframe');
+  frame.style.cssText='width:390px;height:844px;border:0';
+  frame.src=pages?base:base+'index.html';
+  document.body.append(frame);
+  return frame;
+};
+
+async function run(){
+  const photo=await makeImage('image/png');
+  const expected=await bytes(photo);
+  const db=await openDB();
+  if(!sessionStorage.getItem('reopened')){
+    // Seed the original schema with actual legacy Blob records.
+    const legacy={...state,artworks:[state.artworks[0]],images:state.images.slice(0,2),
+      albums:[{...state.albums[0],orderedArtworkIds:['work-0']}]};
+    await change(db,['metadata','files'],tx=>{
+      tx.objectStore('metadata').put(legacy,'archive');
+      tx.objectStore('metadata').put({photos:null},'draft:bad');
+      for(const path of originals.slice(0,2))tx.objectStore('files').put(photo,path);
+    });
+    equal(await readArchive(),legacy,'Legacy archive changed on open');
+    await saveDraft({id:'good',updatedAt:'2026-01-01',work:{title:'Черновик'},cover:'preview',
+      photos:[{id:'preview',original:photo,edited:null,thumb:photo}]},0);
+    await commit(state,[[originals[2],photo]]);
+    sessionStorage.setItem('reopened','1');
+    location.reload();
+    return;
+  }
+
+  const current=await readArchive();
+  equal(current,{...state,revision:1},'Archive changed across page reload');
+  for(const path of originals)equal(await bytes(await readFile(path)),expected,'Original bytes changed');
+  const store=db.transaction('files').objectStore('files');
+  const [oldValue,newValue]=await Promise.all([request(store.get(originals[0])),request(store.get(originals[2]))]);
+  assert(oldValue instanceof Blob&&newValue.bytes instanceof ArrayBuffer,'Expected mixed storage formats');
+  passed.push('Page reload preserves profiles, works, album order, and both original formats including additional photos');
+
+  const drafts=await readDrafts();
+  assert(drafts.unreadable===1&&drafts.items.length===1,'Damaged draft hid the good draft');
+  equal(await bytes(drafts.items[0].photos[0].original),expected,'Draft lost its original photo');
+  assert(await request(db.transaction('metadata').objectStore('metadata').get('draft:bad')),'Damaged draft was removed');
+  passed.push('Broken draft stays intact and does not block the archive or other draft photos');
+
+  const backup=await createBackup(current,readFile);
+  const zip=await readZip(backup);
+  assert(JSON.parse(await (await zip.get('manifest.json')).text()).formatVersion===1,'Backup format changed');
+  const {incoming,verifiedFiles}=await inspectBackup(backup);
+  equal(incoming,{...state,revision:undefined},'Backup omitted metadata');
+  for(const path of originals)equal(await bytes(verifiedFiles.get(path)),expected,'ZIP changed original bytes');
+  const destination={version:1,children:[],artworks:[],images:[],albums:[]};
+  const fresh=planRestore(destination,incoming,verifiedFiles);
+  equal(fresh.archive,incoming,'Empty archive restore lost metadata');
+  assert(fresh.puts.length===6&&fresh.missingOriginals.length===0,'Empty restore omitted originals or previews');
+  passed.push('ZIP v1 round trip includes all photos and preserves archive metadata');
+
+  // Fault injection only in this throwaway browser profile.
+  const distinct=new Blob(['existing bytes'],{type:'image/png'});
+  await change(db,['files'],tx=>{
+    tx.objectStore('files').delete(originals[1]);
+  });
+  // Keep the cover readable so the editor first loads a valid photo and then
+  // encounters the missing additional original.
+  const frame=appFrame();
+  await waitFor(()=>frame.contentDocument?.querySelector('[data-action=drafts]'));
+  (await waitFor(()=>frame.contentDocument?.querySelector('[data-action=detail][data-id=work-0]'))).click();
+  (await waitFor(()=>frame.contentDocument?.querySelector('[data-action=edit]'))).click();
+  const save=await waitFor(()=>frame.contentDocument?.querySelector('#artwork-form [data-action=submit]:disabled'));
+  save.form.requestSubmit();
+  equal(await readArchive(),current,'Partial editor load allowed a save');
+  if(pages){
+    const registration=await frame.contentWindow.navigator.serviceWorker.ready;
+    assert(registration.scope===new URL(base,location.origin).href,'Pages worker scope is incorrect');
+    const cache=(await caches.keys()).find(name=>name.startsWith('little-archive-pages-shell:'+registration.scope+':'));
+    assert(cache,'Pages shell cache was not installed');
+    const shell=await caches.open(cache);
+    for(const asset of ['index.html','app.js','style.css','editorial.css','assets/icon.svg','assets/fonts/Nunito.ttf','manifest.webmanifest']){
+      assert(await shell.match(base+asset),'Missing response in Pages shell cache: '+asset);
+    }
+    passed.push('Pages artifact opens under a project subpath and installs a scoped Service Worker shell');
+  }
+  frame.remove();
+  await change(db,['files'],tx=>tx.objectStore('files').put(distinct,originals[0]));
+  passed.push('Application opens with a damaged draft and refuses to save a partly loaded old work');
+  const edited=await readArchive();
+  edited.artworks[0].title='Локальное изменение';
+  await commit(edited);
+  const repair=planRestore(edited,incoming,verifiedFiles);
+  await commit(repair.archive,repair.puts,[],null,repair.missingOriginals);
+  equal(await bytes(await readFile(originals[1])),expected,'Matching missing original was not restored');
+  equal(await (await readFile(originals[0])).text(),'existing bytes','Restore overwrote an existing file');
+  equal((await readArchive()).artworks[0].title,'Локальное изменение','Restore overwrote metadata');
+  const afterRepair=await readArchive();
+  const again=planRestore(afterRepair,incoming,verifiedFiles);
+  await commit(again.archive,again.puts,[],null,again.missingOriginals);
+  equal(await readArchive(),{...afterRepair,revision:afterRepair.revision+1},'Repeated restore changed archive content');
+  passed.push('Restore repairs absent originals and preserves existing files and metadata');
+
+  const invalidDbValue={version:99};
+  await change(db,['metadata'],tx=>tx.objectStore('metadata').put(invalidDbValue,'archive'));
+  let readError;
+  try{await readArchive();}catch(error){readError=error;}
+  assert(readError?.message==='Unsupported archive version','Invalid archive did not reject');
+  equal(await request(db.transaction('metadata').objectStore('metadata').get('archive')),invalidDbValue,'Invalid archive was overwritten');
+  passed.push('Invalid archive rejects cleanly and is preserved for recovery');
+
+  await change(db,['metadata','files'],tx=>{
+    tx.objectStore('metadata').delete('archive');
+    tx.objectStore('files').clear();
+  });
+  await commit(fresh.archive,fresh.puts);
+  equal(await readArchive(),{...incoming,revision:1},'Full restore changed metadata');
+  for(const path of originals)equal(await bytes(await readFile(path)),expected,'Full restore lost an original');
+  passed.push('Full restore into empty test storage saves every original and record');
+  await checkPhaseTwo(db,photo,expected);
+  await report({passed});
+}
+
+async function checkPhaseTwo(db,photo,expected){
+  const frame=appFrame();
+  const doc=()=>frame.contentDocument;
+  const query=selector=>doc()?.querySelector(selector);
+  const click=async selector=>(await waitFor(()=>query(selector))).click();
+  const nav=page=>click('.mobile-nav [data-page="'+page+'"]');
+  const value=(input,next)=>{
+    input.value=next;
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+  await waitFor(()=>query('.dashboard [data-stat=children] dd'));
+  equal([...doc().querySelectorAll('.family-overview dd')].map(el=>el.textContent),['2','2','1'],'Dashboard family counts are wrong');
+  assert(query('.mobile-nav [aria-current=page]').dataset.page==='home','Initial tab was not Home');
+  assert(doc().documentElement.scrollWidth<=390,'Dashboard overflows a 390px viewport');
+  await click('[data-action=openPeriod][data-period="3"]');
+  assert(query('#period-filter').value==='3','Dashboard did not apply age period');
+  equal([...doc().querySelectorAll('.art-grid [data-action=detail]')].map(el=>el.dataset.id),['work-1'],'Age period returned the wrong works');
+  await click('.child-tabs [data-id=aurora]');
+  assert(query('#period-filter').value==='3'&&!query('.art-grid .work-card'),'Choosing a child reset the age filter');
+  await nav('archive');
+  assert(query('.child-tabs [data-id=""]').getAttribute('aria-pressed')==='true','Archive nav did not default to All children');
+  assert(doc().querySelectorAll('.art-grid .work-card').length===2,'Family archive omitted a child');
+  assert(doc().documentElement.scrollWidth<=390,'Archive overflows a 390px viewport');
+  passed.push('Dashboard opens first, counts both children and routes age collections into combined family filters');
+
+  await click('.art-grid [data-id=work-0][data-action=detail]');
+  await click('#modal [data-action=edit]');
+  await waitFor(()=>doc().querySelectorAll('#photo-list img').length===2);
+  const oldForm=query('#artwork-form');
+  value(oldForm.elements.notes,'Заметка после редактирования');
+  await click('#artwork-form [data-action=submit]');
+  await waitFor(()=>!query('#artwork-form'));
+  const afterEdit=await readArchive();
+  assert(afterEdit.artworks.find(w=>w.id==='work-0').notes==='Заметка после редактирования','Edit did not save');
+  equal(afterEdit.images.filter(i=>i.artworkId==='work-0').map(i=>[i.id,i.originalPath]),[['one',originals[0]],['two',originals[1]]],'Old work lost photo relations');
+  for(const path of originals.slice(0,2))equal(await bytes(await readFile(path)),expected,'Edit replaced an original');
+  passed.push('Saving a metadata edit on a legacy work preserves both original files and references');
+
+  await click('.global-add');
+  const form=await waitFor(()=>query('#artwork-form'));
+  assert(form.elements.child.value==='aurora','Last-used child was not remembered');
+  value(form.elements.date,'2021-01-01');
+  value(form.elements.child,'misha');
+  value(form.elements.title,'Быстрое добавление');
+  const choose=(file,filename)=>{
+    const transfer=new frame.contentWindow.DataTransfer();
+    transfer.items.add(new frame.contentWindow.File([file],filename,{type:file.type}));
+    const input=form.querySelector('#files');
+    input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+  };
+  choose(photo,'first.png');
+  const preview=await waitFor(()=>form.querySelector('#photo-list img')?.src);
+  const jpeg=await makeImage('image/jpeg');
+  // JPEG DateTimeOriginal with a different date, injected into a real image.
+  const exif=new Uint8Array(74),view=new DataView(exif.buffer),at=10;
+  view.setUint16(0,0xffe1);view.setUint16(2,72);exif.set([69,120,105,102,0,0],4);
+  view.setUint16(at,0x4949);view.setUint16(at+2,42,true);view.setUint32(at+4,8,true);
+  view.setUint16(at+8,1,true);view.setUint16(at+10,0x8769,true);view.setUint16(at+12,4,true);
+  view.setUint32(at+14,1,true);view.setUint32(at+18,26,true);
+  view.setUint16(at+26,1,true);view.setUint16(at+28,0x9003,true);view.setUint16(at+30,2,true);
+  view.setUint32(at+32,20,true);view.setUint32(at+36,44,true);
+  exif.set(new TextEncoder().encode('2023:02:15 10:20:30'),at+44);
+  const replacement=new Blob([jpeg.slice(0,2),exif,jpeg.slice(2)],{type:'image/jpeg'});
+  const {photoDate}=await import(base+'media.js');
+  assert(await photoDate(replacement)==='2023-02-15','Test JPEG has no readable EXIF capture date');
+  choose(replacement,'replacement.jpg');
+  await waitFor(()=>form.querySelector('#photo-list img')?.src!==preview);
+  assert(form.elements.date.value==='2021-01-01','EXIF overwrote manual date');
+  await click('#artwork-form [data-action=submit]');
+  await waitFor(()=>{
+    const open=query('#artwork-form');
+    if(!open)return true;
+    const error=open.querySelector('.inline-error').textContent;
+    if(error)throw Error('Quick Add: '+error);
+    const invalid=open.querySelector(':invalid');
+    if(invalid)throw Error('Quick Add invalid '+invalid.name+': '+invalid.validationMessage);
+    return false;
+  });
+  const added=await readArchive(),newWork=added.artworks.find(w=>w.title==='Быстрое добавление');
+  assert(newWork?.artworkDate==='2021-01-01'&&newWork.childId==='misha'&&newWork.category==='other'&&newWork.uncategorized===true,'Quick Add changed required or optional fields');
+  const newPhotos=added.images.filter(i=>i.artworkId===newWork.id);
+  assert(newPhotos.length===1,'Quick Add saved more than one photo');
+  equal(await bytes(await readFile(newPhotos[0].originalPath)),await bytes(replacement),'Quick Add changed the JPEG original');
+  assert(query('.art-grid [data-id="'+newWork.id+'"]'),'New artwork not visible in Archive');
+  const newBackup=await inspectBackup(await createBackup(added,readFile));
+  assert(newBackup.incoming.artworks.find(w=>w.id===newWork.id).uncategorized===true,'ZIP lost the optional-category flag');
+  passed.push('Quick Add replaces the preview, preserves a manual date against EXIF, and saves exactly one original');
+
+  const library=document.createElement('script');library.src=base+'vendor/pdf-lib.min.js';
+  const pdfLoaded=new Promise((resolve,reject)=>{library.onload=resolve;library.onerror=reject;});
+  document.head.append(library);await pdfLoaded;
+  const {createPDF}=await import(base+'pdf.js');
+  const pdf=await createPDF(added,added.albums[0],readFile,true,()=>{});
+  const parsed=await window.PDFLib.PDFDocument.load(await pdf.blob.arrayBuffer());
+  assert(parsed.getPageCount()===2&&parsed.getTitle()==='Альбом','PDF export lost its cover or artwork page');
+  passed.push('PDF export still produces a readable A4 book with a Cyrillic album title');
+  await click('[data-language=en]');
+  assert(query('.child-tabs [data-id=""]').textContent==='All children','English family labels did not load');
+  const search=query('#search');search.focus();value(search,'Быстрое');
+  await waitFor(()=>doc().querySelectorAll('.art-grid .work-card').length===1);
+  assert(doc().activeElement===search&&query('.art-grid .work-open').dataset.id===newWork.id,'Search replaced its focused field or returned wrong results');
+  await click('[data-language=ru]');
+  passed.push('Mobile-width navigation switches RU/EN and search keeps focus while filtering Cyrillic');
+  frame.remove();
+
+  await change(db,['metadata'],tx=>{const store=tx.objectStore('metadata');store.delete('archive');store.delete('draft:good');store.delete('draft:bad');});
+  const first=appFrame();
+  const firstQuery=s=>first.contentDocument?.querySelector(s);
+  (await waitFor(()=>firstQuery('.welcome-paper [data-action=newChild]'))).click();
+  const profile=await waitFor(()=>firstQuery('#profile-form'));
+  assert(profile.elements.name.required&&profile.elements.birthday.required,'First profile does not request a name and birthday');
+  value(profile.elements.name,'Новый профиль');value(profile.elements.birthday,'2021-04-29');
+  profile.querySelector('[data-action=submit]').click();
+  await waitFor(()=>firstQuery('.welcome-paper [data-action=newWork]'));
+  const firstState=await readArchive();
+  assert(firstState.children.length===1&&firstState.artworks.length===0,'Onboarding mixed demo records into the archive');
+  passed.push('First opening offers a first profile and returns to a clean Dashboard after creation');
+  first.remove();
+}
+run().catch(error=>report({error:error.stack||String(error)}));

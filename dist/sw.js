@@ -1,4 +1,4 @@
-const CACHE='little-archive-shell-editorial-v15';
+const CACHE='little-archive-shell-editorial-v16';
 const FILES=['./','./index.html','./style.css','./app.js','./domain.js','./db.js','./i18n.js','./media.js','./pdf.js','./zip.js','./vendor/pdf-lib.min.js','./assets/icon.svg','./assets/flowers.svg','./assets/rainbow.svg','./assets/fish.svg','./assets/house.svg','./assets/sun.svg','./assets/leaf.svg'];
 FILES.push('./backup-restore.js','./storage-error.js','./storage-codec.js','./draft-queue.js','./assets/background-doodles.svg','./editorial.css','./ui.js','./assets/fonts/Nunito.ttf','./manifest.webmanifest');
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES))));

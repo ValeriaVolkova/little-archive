@@ -22,7 +22,7 @@ export async function inspectBackup(file,onProgress=()=>{}){
   if(manifestBlob.size>10*1024*1024)throw Error('Manifest too large');
   const manifest=JSON.parse(await manifestBlob.text());
   if(manifest.format!=='little-archive'||manifest.formatVersion!==1)throw Error('Unknown format');
-  const incoming=validateArchive(manifest.archive),verifiedFiles=new Map();
+  const incoming=validateArchive(manifest.archive,{allowInvalidDates:true}),verifiedFiles=new Map();
   let done=0;
   for(const image of incoming.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
