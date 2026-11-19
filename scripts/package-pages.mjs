@@ -9,7 +9,7 @@ import {runInNewContext} from 'node:vm';
 // dropped into dist are excluded unless explicitly reviewed and listed here.
 const allowedFiles=[
   'index.html','manifest.webmanifest','style.css','editorial.css','sw.js',
-  'app.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
+  'app.js','pwa-update.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
   'vendor/heic-to.js','vendor/heic-to.LICENSE.txt','crop-editor.js','scrapbook.js','media.js','pdf.js','storage-codec.js','storage-error.js','ui.js','zip.js',
   'assets/background-doodles.svg','assets/fish.svg','assets/flowers.svg',
   'assets/house.svg','assets/icon.svg','assets/leaf.svg','assets/rainbow.svg',
@@ -28,6 +28,7 @@ for(const name of allowedFiles){
   hash.update(name).update('\0').update(createHash('sha256').update(content).digest());
 }
 const release=hash.digest('hex').slice(0,16);
+files.set('app.js',Buffer.from(replaceOnce(files.get('app.js').toString('utf8'),/const buildVersion='3A.1-local';/,"const buildVersion='3A.1 · "+release+"';")));
 const site=new URL('https://example.github.io/project-review/');
 function checkPath(ref,from){
   assert(ref.startsWith('./')||ref.startsWith('../'),`Non-relative URL in ${from}: ${ref}`);
@@ -53,7 +54,7 @@ const manifest=JSON.parse(files.get('manifest.webmanifest'));
 for(const ref of [manifest.start_url,manifest.scope,...manifest.icons.map(icon=>icon.src)]){
   checkPath(ref,'manifest.webmanifest');
 }
-const registration=files.get('app.js').toString('utf8').match(/serviceWorker\.register\('([^']+)'\)/);
+const registration=files.get('app.js').toString('utf8').match(/serviceWorker\.register\('([^']+)'/);
 assert(registration,'Service Worker registration is missing');
 assert.equal(checkPath(registration[1],'app.js'),'sw.js');
 
@@ -76,7 +77,7 @@ files.set('sw.js',Buffer.from(worker));
 const handlers={},cached=new Set(),deleted=[],prefix='little-archive-pages-shell:'+site.href+':';
 const active=prefix+release,previous=prefix+'previous',other='little-archive-pages-shell:https://example.github.io/other/:old';
 runInNewContext(worker,{
-  URL,
+  URL,Request,
   self:{
     location:site,registration:{scope:site.href},
     addEventListener(name,handler){handlers[name]=handler;}
@@ -85,7 +86,7 @@ runInNewContext(worker,{
     async open(name){
       assert.equal(name,active);
       return {
-        async addAll(paths){for(const ref of paths)cached.add(checkPath(ref,'sw.js'));},
+        async addAll(paths){for(const ref of paths){assert.equal(ref.cache,'reload');cached.add(checkPath('./'+new URL(ref.url).pathname.slice(site.pathname.length),'sw.js'));};},
         async match(){return 'cached app shell';}
       };
     },

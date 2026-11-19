@@ -200,3 +200,5 @@ dialog{border:1px solid var(--line);border-radius:var(--radius-lg);background:va
 @media(min-width:760px){.art-grid.masonry{--columns:3;column-gap:var(--space-3)}}
 @media(min-width:1250px){.art-grid.masonry{--columns:4}}
 @media(max-width:600px){.welcome-paper>.primary{width:100%;min-height:48px}}
+.update-banner:not([hidden]){display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);margin-bottom:var(--space-4)}
+.update-banner[hidden]{display:none}

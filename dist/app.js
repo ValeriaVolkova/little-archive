@@ -1,3 +1,4 @@
+import {updateManager} from './pwa-update.js';
 import {dailyMemory,chapters,layoutGallery} from './scrapbook.js';
 import {editCrop} from './crop-editor.js';
 import {storageErrorKey} from './storage-error.js';
@@ -126,6 +127,20 @@ const footer=(label=t('save'),action='submit')=>'<footer class="modal-footer">'+
 modal.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
 modal.addEventListener('click',event=>{const el=event.target.closest('[data-action]');if(!el)return;if(el.dataset.action==='close')closeModal();else if(modalAction)Promise.resolve(modalAction(el.dataset.action,el,event)).catch(()=>inlineError(t('saveError')));});
 
+const buildVersion='3A.1-local';
+let pendingActions=0;
+const updates=updateManager({
+  safe:()=>!busy&&!dirty&&!pendingActions&&!document.querySelector('dialog[open]'),
+  reload:()=>location.reload(),
+  paint:({available,applying,notice})=>{
+    const banner=app.querySelector('.update-banner');
+    if(!banner)return;
+    banner.hidden=!available&&!applying;
+    banner.querySelector('span').textContent=t(notice||(applying?'updating':'updateAvailable'));
+    const control=banner.querySelector('button');
+    control.disabled=applying;control.textContent=t('applyUpdate');
+  }
+});
 function navigation(mobile=false){return '<nav class="'+(mobile?'mobile-nav':'navigation')+'">'+[['home','home'],['archive','grid'],['albums','album'],['settings','settings']].map(([id,sym])=>button('nav',t(id),(mobile?'':'nav-button ')+(page===id?'active':''),sym,'data-page="'+id+'" aria-current="'+(page===id?'page':'false')+'"')).join('')+'</nav>';}
 function render(){
   imagesById=new Map(state.images.map(image=>[image.id,image]));
@@ -135,8 +150,9 @@ function render(){
   '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="filterChild" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
   button('newChild',t('addChild'),'child-filter add','plus')+'<div class="side-foot">'+icon('lock')+'<div>'+e(t('local'))+'<br>'+e(t('private'))+'</div></div></aside><main class="main">'+
   '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">Little Archive</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span><button class="language '+(lang==='ru'?'active':'')+'" data-action="language" data-language="ru" aria-label="Русский">RU</button><button class="language '+(lang==='en'?'active':'')+'" data-action="language" data-language="en" aria-label="English">EN</button>'+(page!=='home'?button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"'):'')+'</div></div>'+
+  '<section class="update-banner panel" hidden><span role="status"></span>'+button('applyUpdate',t('applyUpdate'),'secondary')+'</section>'+
   ({home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
-  hydrate();
+  hydrate();updates.show();
 }
 let chapterChild='', filtersExpanded=false;
 const memoryKey='little-archive-daily-memory';
@@ -228,7 +244,7 @@ function archiveView(){
 function albumsView(){return hero(t('albumHeadline'),t('albumSubtitle'),'newAlbum',t('createAlbum'))+demoBanner()+(state.albums.length?'<div class="album-grid">'+state.albums.map(a=>{const theme=albumTheme(a.id);return '<button class="book-card" data-action="album" data-id="'+e(a.id)+'"><div class="album-cover theme-'+theme+'">'+coverDecoration(theme)+'<div class="book-imprint">Little Archive</div><h3>'+e(a.title)+'</h3><div class="book-owner">'+childLabel(a.childId)+'</div><div class="book-number">'+e(t('theme'+theme))+'</div></div><div class="book-caption"><span>'+e(countText(a.orderedArtworkIds.length))+'</span>'+icon('chevron')+'</div></button>';}).join('')+'</div>':emptyView(t('emptyAlbums'),t('emptyAlbumsHint'),'newAlbum',t('createAlbum'),'book'));}
 function settingsView(){return hero(t('settingsHeadline'),t('local'))+demoBanner()+'<div class="settings-grid"><section class="panel"><h2>'+icon('photo')+e(t('profiles'))+'</h2>'+state.children.map(c=>'<div class="profile-row"><span class="child-dot" style="background:'+e(c.color)+'40">'+e(c.name[0])+'</span><div>'+e(c.name)+(c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':'')+'</div>'+button('editChild',t('edit'),'text-button','','data-id="'+e(c.id)+'"')+'</div>').join('')+button('newChild',t('addChild'),'secondary','plus')+'</section>'+
   '<section class="panel"><h2>'+icon('download')+e(t('backup'))+'</h2><p>'+e(t('backupHint'))+'</p><div class="buttons">'+button('export',t('exportBackup'),'secondary','download')+button('import',t('importBackup'),'secondary','upload')+'</div><p class="warning">'+e(t('backupWarning'))+'</p></section>'+
-  '<section class="panel"><h2>'+icon('lock')+e(t('privacyTitle'))+'</h2><p>'+e(t('privacyBody'))+'</p><p class="web-note">'+e(t('webNote'))+'</p></section><section class="panel"><h2>'+e(t('language'))+'</h2><div class="buttons">'+button('language','Русский',lang==='ru'?'primary':'secondary','','data-language="ru"')+button('language','English',lang==='en'?'primary':'secondary','','data-language="en"')+'</div></section></div>';}
+  '<section class="panel"><h2>'+icon('lock')+e(t('privacyTitle'))+'</h2><p>'+e(t('privacyBody'))+'</p><p>'+e(t('appVersion'))+' · <code data-build>'+e(buildVersion)+'</code></p><p class="web-note">'+e(t('webNote'))+'</p></section><section class="panel"><h2>'+e(t('language'))+'</h2><div class="buttons">'+button('language','Русский',lang==='ru'?'primary':'secondary','','data-language="ru"')+button('language','English',lang==='en'?'primary':'secondary','','data-language="en"')+'</div></section></div>';}
 function openArchive(period='',child=''){clearTimeout(searchTimer);filters={...archiveFilters(),period,child};page='archive';render();window.scrollTo(0,0);}
 async function enterOwn(){demonstration=false;state=realState;page='home';filters=archiveFilters();clearURLs();render();if(!state.children.length)profileEditor();}
 
@@ -298,7 +314,7 @@ async function artworkEditor(id,recovered=null){
   const recordInput=event=>{if(event.target.name==='date')manualDate=true;dirty=true;autosave();};
   form.oninput=event=>{if(event.target.type!=='file')recordInput(event);};
   form.elements.date.addEventListener('change',recordInput);
-  modalCleanup=()=>{queue.flush().catch(()=>{}).then(async()=>{await refreshDrafts();render();});};
+  modalCleanup=()=>{pendingActions++;queue.flush().catch(()=>{}).then(async()=>{await refreshDrafts();render();}).finally(()=>{pendingActions--;});};
   if(recovered)paintPhotos();
   function paintPhotos(){
     if(dirty)autosave();
@@ -487,6 +503,9 @@ async function importBackup(file){
 const backupInput=document.createElement('input');backupInput.type='file';backupInput.accept='.zip,application/zip';backupInput.hidden=true;document.body.append(backupInput);backupInput.onchange=()=>{if(backupInput.files[0])importBackup(backupInput.files[0]);backupInput.value='';};
 app.onclick=async event=>{
   const el=event.target.closest('[data-action]');if(!el)return;
+  if(updates.applying)return;
+  if(el.dataset.action==='applyUpdate'){updates.apply();return;}
+  pendingActions++;
   try{
     if(busy)return;
     const action=el.dataset.action;
@@ -514,7 +533,7 @@ app.onclick=async event=>{
     if(action==='album')albumDetail(el.dataset.id);
     if(action==='export')await exportBackup();
     if(action==='import')backupInput.click();
-  }catch{toast(stale?t('syncNotice'):t('error'));}
+  }catch{toast(stale?t('syncNotice'):t('error'));}finally{pendingActions--;}
 };
 app.addEventListener('toggle',event=>{if(event.target.matches('.archive-options')&&event.target.isConnected)filtersExpanded=event.target.open;},true);
 app.onchange=event=>{if(event.target.id==='chapter-child'){chapterChild=event.target.value;render();return;}const map={'year-filter':'year','period-filter':'period','sort':'sort'};if(map[event.target.id]){filters[map[event.target.id]]=event.target.value;render();}};
@@ -550,7 +569,7 @@ async function makeDemo(){
 }
 try{realState=await readArchive();state=realState;render();if(await refreshDrafts()&&drafts.length)render();}
 catch{app.innerHTML='<div class="empty">'+icon('lock')+'<h2>'+e(t('error'))+'</h2><p>'+e(t('storageError'))+'</p></div>';}
-if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{});
+if('serviceWorker' in navigator)updates.start(navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}));
 
 async function refreshDrafts(){
   try{
