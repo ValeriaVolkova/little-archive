@@ -1,1 +1,1 @@
-{"name":"Drawkeeper","short_name":"Drawkeeper","start_url":"./","scope":"./","display":"standalone","background_color":"#FFF1E6","theme_color":"#FFF1E6","icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+{"name":"Drawkeeper","short_name":"Drawkeeper","start_url":"./","scope":"./","display":"standalone","background_color":"#FFF6EC","theme_color":"#FFF6EC","icons":[{"src":"./assets/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}

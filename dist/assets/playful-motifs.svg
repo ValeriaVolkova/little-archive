@@ -1,49 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg">
-  <symbol id="flower" viewBox="0 0 120 120">
-    <g fill="currentColor">
-      <ellipse cx="60" cy="30" rx="20" ry="26"/>
-      <ellipse cx="60" cy="30" rx="19" ry="26" transform="rotate(72 60 60)"/>
-      <ellipse cx="60" cy="30" rx="19" ry="26" transform="rotate(144 60 60)"/>
-      <ellipse cx="60" cy="30" rx="19" ry="26" transform="rotate(216 60 60)"/>
-      <ellipse cx="60" cy="30" rx="19" ry="26" transform="rotate(288 60 60)"/>
-    </g>
-    <circle cx="60" cy="60" r="15" fill="#fff1e6"/>
-  </symbol>
-  <symbol id="rainbow" viewBox="0 0 120 120">
-    <g fill="none" stroke-width="9" stroke-linecap="round">
-      <path d="M10 91a50 50 0 0 1 100 0" stroke="#ff791e"/>
-      <path d="M21 91a39 39 0 0 1 78 0" stroke="#f477a8"/>
-      <path d="M32 91a28 28 0 0 1 56 0" stroke="#4775e8"/>
-      <path d="M43 91a17 17 0 0 1 34 0" stroke="#b99af0"/>
-    </g>
+  <symbol id="arcs" viewBox="0 0 120 120">
+    <path d="M12 97V73a48 48 0 0 1 96 0v24M31 97V74a29 29 0 0 1 58 0v23M50 97V75a10 10 0 0 1 20 0v22"
+      fill="none" stroke="currentColor" stroke-width="10"/>
   </symbol>
   <symbol id="waves" viewBox="0 0 120 120">
-    <path d="M-12 68c44 8 29-36 64-45s48 13 76-25M-9 101c44 8 32-36 67-45s48 13 76-25M-5 134c44 8 34-36 69-45s48 13 76-25" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+    <path d="M-15 37C19 37 19 11 45 11s35 27 56 27 30-12 34-19M-15 67C19 67 19 41 45 41s35 27 56 27 30-12 34-19M-15 97C19 97 19 71 45 71s35 27 56 27 30-12 34-19"
+      fill="none" stroke="currentColor" stroke-width="12"/>
   </symbol>
   <symbol id="checker" viewBox="0 0 120 120">
-    <path d="M0 0h30v30H0zm60 0h30v30H60zM30 30h30v30H30zm60 0h30v30H90zM0 60h30v30H0zm60 0h30v30H60zM30 90h30v30H30zm60 0h30v30H90z" fill="currentColor"/>
+    <path d="M12 21 36 15 42 40 16 44ZM62 17 87 21 88 45 65 41ZM42 40 65 41 68 66 44 69ZM88 45 113 47 109 70 88 69ZM19 70 44 69 46 94 20 99ZM68 66 88 69 89 93 70 92ZM46 94 70 92 74 114 48 116ZM89 93 107 92 109 112 90 115Z" fill="currentColor"/>
   </symbol>
-  <symbol id="cloud" viewBox="0 0 120 120">
-    <path d="M18 48q7-13 22-10Q50 13 70 25q10 5 13 16 22-8 31 13 10 26-15 37H23C-2 87-6 57 18 48Z" fill="currentColor"/>
-    <g fill="#171b35"><circle cx="47" cy="57" r="4"/><circle cx="74" cy="57" r="4"/></g>
-    <path d="M55 67q6 7 12 0" stroke="#171b35" stroke-width="3" stroke-linecap="round" fill="none"/>
-    <g fill="#f477a8"><circle cx="38" cy="66" r="3"/><circle cx="83" cy="66" r="3"/></g>
+  <symbol id="loop" viewBox="0 0 120 120">
+    <path d="M-10 96C23 110 34 84 36 59c2-30 17-43 39-39 26 5 29 40 7 52-17 9-30-5-44-11-14-6-31-5-48 6"
+      fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round"/>
   </symbol>
-  <symbol id="sun" viewBox="0 0 120 120">
-    <path d="m60 3 9 26 22-16-3 29 28-3-17 22 17 22-27-4 2 28-22-16-9 26-10-26-22 16 3-28-27 4 17-22L4 39l27 3-3-29 22 16Z" fill="currentColor"/>
-    <g fill="#171b35"><circle cx="48" cy="56" r="4"/><circle cx="73" cy="56" r="4"/></g>
-    <path d="M52 69q8 9 17 0" stroke="#171b35" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <symbol id="offset" viewBox="0 0 120 120">
+    <path d="M13 31c0-12 10-19 27-19h61v30H58c-8 0-12 4-12 10 0 8 4 12 12 12h34v31H44c-21 0-31-14-31-29Z" fill="currentColor"/>
+    <rect x="55" y="76" width="55" height="27" rx="13" fill="currentColor" opacity=".5"/>
   </symbol>
-  <symbol id="eyes" viewBox="0 0 120 120">
-    <path d="M18 102C-1 80 6 48 19 26c14-22 43-19 60-15 27 6 44 27 36 60-3 21-15 34-31 39-21 7-53 3-66-8Z" fill="currentColor"/>
-    <g fill="#fff1e6"><ellipse cx="42" cy="51" rx="13" ry="17"/><ellipse cx="77" cy="49" rx="13" ry="17"/></g>
-    <g fill="#171b35"><ellipse cx="46" cy="53" rx="6" ry="9"/><ellipse cx="81" cy="51" rx="6" ry="9"/></g>
-    <path d="M54 72q7 7 14 0" stroke="#171b35" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <symbol id="tiles" viewBox="0 0 120 120">
+    <g fill="currentColor" transform="rotate(-12 60 60)">
+      <rect x="19" y="21" width="35" height="35" rx="16"/>
+      <rect x="64" y="21" width="35" height="35" rx="8" opacity=".52"/>
+      <rect x="19" y="66" width="35" height="35" rx="8" opacity=".52"/>
+      <rect x="64" y="66" width="35" height="35" rx="16"/>
+    </g>
   </symbol>
-  <symbol id="confetti" viewBox="0 0 120 120">
-    <circle cx="27" cy="30" r="13" fill="#f477a8"/>
-    <path d="M71 22q16-16 26 0t-6 24q-27 7-20-24Z" fill="#ff791e"/>
-    <path d="m34 69 6 15 16 4-14 9-1 16-12-11-15 4 7-15-8-13 16 1Z" fill="#4775e8"/>
-    <path d="M72 76q8-8 16 0t16 0" fill="none" stroke="#b99af0" stroke-width="7" stroke-linecap="round"/>
+  <symbol id="ribbon" viewBox="0 0 120 120">
+    <path d="M128 13c-45-16-52 6-62 32S39 75 7 61" fill="none" stroke="currentColor" stroke-width="17"/>
+    <path d="M128 42c-38-12-41 8-49 32S50 105 19 93" fill="none" stroke="var(--pattern-accent,currentColor)" stroke-width="16" opacity=".8"/>
+  </symbol>
+  <symbol id="lines" viewBox="0 0 120 120">
+    <path d="M8 105 98 15M32 113l80-80M5 78l76-76M0 50 48 2M66 112l46-46" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
   </symbol>
 </svg>

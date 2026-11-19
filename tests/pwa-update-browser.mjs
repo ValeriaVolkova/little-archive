@@ -207,10 +207,10 @@ try{
   await browser.setOffline(true);
   await app.reload();await app.locator('#chapter-child').waitFor();
   assert.ok(await app.evaluate(async()=>{
-    const fonts=[['700 28px "Balsamiq Sans"','Ёж Й Ы Щ Archive'],['400 18px "Balsamiq Sans"','Ёлка Home'],['400 16px Nunito','Книга Art']];
+    const fonts=[['700 28px Onest','Ёж Й Ы Щ Archive'],['600 16px Onest','Añadir dibujo'],['400 16px Onest','Книга Art']];
     const loaded=await Promise.all(fonts.map(([font,text])=>document.fonts.load(font,text)));
     return loaded.every(faces=>faces.length&&faces.every(face=>face.status==='loaded'))&&
-      getComputedStyle(document.querySelector('.welcome-paper h1')).fontFamily.includes('Balsamiq Sans');
+      getComputedStyle(document.querySelector('.welcome-paper h1')).fontFamily.includes('Onest');
   }));
   assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
   await app.locator('.mobile-nav [data-page=archive]').click();
@@ -218,6 +218,6 @@ try{
   await app.locator('.mobile-nav [data-page=albums]').click();
   assert.ok(await app.evaluate(async()=> (await fetch('./assets/playful-motifs.svg')).ok));
   assert.match(await app.locator('.book-jacket').first().getAttribute('class'),/jacket-lavender/);
-  console.log('PASS: installed PWA restarts offline with Balsamiq Sans, Nunito, artwork and cover motifs');
+  console.log('PASS: installed PWA restarts offline with Onest, artwork and cover motifs');
   console.log('PASS: installed app after browser restart preserves child, three artworks, exact originals, draft and localStorage marker, and Spanish language choice');
 }finally{await browser?.close();server.close();}

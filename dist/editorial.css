@@ -1,8 +1,7 @@
-@font-face{font-family:Nunito;src:url('./assets/fonts/Nunito.ttf') format('truetype');font-weight:200 1000;font-style:normal;font-display:swap}
 :root{
  --bg:#F5EBD9;--paper:#FFF9EE;--ink:#292C30;--muted:#6D655E;--tomato:#F5793B;--tangerine:#F5793B;--butter:#FCCA59;--pink:#F2B6C3;--grass:#267F53;--mint:#C5D9B8;--sky:#99B7F5;--cobalt:#49649F;--lavender:#D4C5EB;
  --line:#DED8CE;--sage:var(--grass);--sage-dark:var(--cobalt);--sage-light:#E5EAFD;--rose:var(--pink);
- --font-display:Nunito,ui-rounded,system-ui,sans-serif;--font-ui:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+ --font-display:ui-rounded,system-ui,sans-serif;--font-ui:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-6:24px;--space-8:32px;--space-12:48px;
  --radius-sm:10px;--radius:20px;--radius-lg:28px;--pill:999px;--shadow-paper:0 3px 0 #302B2910;--shadow-book:5px 6px 0 #302B2916;--duration:220ms;--ease:cubic-bezier(.2,.7,.3,1);
  font-family:var(--font-ui);background:var(--bg);color:var(--ink)
@@ -82,7 +81,7 @@ dialog{border:1px solid var(--line);border-radius:var(--radius-lg);background:va
 @media(max-width:600px){.archive-home{grid-template-columns:minmax(0,1fr)}}
 /* Quiet decorative layer: never intercepts taps or enters the reading order. */
 .main{position:relative;isolation:isolate;min-height:100dvh}
-.main:before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:url('./assets/background-doodles.svg') top right/1200px 1000px repeat-y}
+.main:before{content:'';position:absolute;inset:0;z-index:-1;pointer-events:none;background:none}
 @media(max-width:600px){.main:before{background-size:700px 740px;background-position:top right;opacity:.7}}
 /* Bottom navigation follows the reference pastel palette. */
 .mobile-nav{background:#F2B6C3;border:1px solid #E5A8B5}

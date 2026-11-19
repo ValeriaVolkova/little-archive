@@ -164,13 +164,13 @@ function render(){
 }
 let chapterChild='', filtersExpanded=false;
 function displayTitle(work){return /\.(jpe?g|png|heic|heif|webp)$/i.test(work.title.trim())?'':work.title.trim();}
-const coverMotifs={cream:'flower',peach:'waves',sage:'checker',sky:'cloud',
-  lavender:'waves',butter:'sun',terracotta:'eyes',paper:'rainbow'};
+const coverMotifs={cream:'arcs',peach:'waves',sage:'checker',sky:'loop',
+  lavender:'offset',butter:'tiles',terracotta:'ribbon',paper:'lines'};
 const motif=(name,className)=>`<svg class="playful-motif ${className}" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><use href="./assets/playful-motifs.svg#${name}"/></svg>`;
 function dashboardView(){
   const child=state.children.find(c=>c.id===chapterChild)||state.children[0];
   return `<div class="dashboard"><header class="welcome-paper"><h1>${appName}</h1><div class="brand-tagline">${e(t('tagline'))}</div>
-    <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${motif('flower','welcome-bloom')}${motif('checker','welcome-checker')}
+    <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${motif('ribbon','welcome-pattern')}
     ${button(child?'newWork':'newChild',t(child?'addDrawing':'addFirstChild'),'primary','plus')}
     ${child?'':button('demo',t('tryDemo'),'text-button','arrow')}</header>
     ${demoBanner()}${draftBanner()}
@@ -178,13 +178,17 @@ function dashboardView(){
       <label class="chapter-profile">${e(t('child'))} <select id="chapter-child">${state.children.map(c=>option(c.id,c.name,child.id)).join('')}</select> ${button('childPage',t('profile'),'text-button','','data-id="'+e(child.id)+'"')}</label>
       <div class="period-grid">${chapters(state.artworks,child).map(([period,count])=>
       `<button class="period-card tone-${period%5}" data-action="openPeriod" data-id="${e(child.id)}" data-period="${period}">
-      <strong>${e(periodText(period))}</strong><span>${e(countText(count))}</span></button>`).join('')||`<p class="dashboard-empty">${e(t('emptyChapters'))}</p>`}</div></section>`:''}</div>`;
+      <strong>${e(periodText(period))}</strong><span>${e(countText(count))}</span></button>`).join('')||`<p class="dashboard-empty">${e(t('emptyChapters'))}</p>`}</div></section>`:''}
+    <div class="home-links">
+      ${button('nav',t('archive'),'secondary','grid','data-page="archive"')}
+      ${button('nav',t('albums'),'secondary','album','data-page="albums"')}
+    </div></div>`;
 }
 function draftBanner(){return drafts.length&&!demonstration?'<div class="draft-banner">'+button('drafts',t('resumeDraft')+' · '+drafts.length,'secondary','edit')+'</div>':'';}
-function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('spark')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
+function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('grid')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
 function archiveHero(){
   const profiles=[{id:'',name:t('familyFilter')},...state.children];
-  return `<section class="archive-home"><div class="archive-home-heading"><h1>${decoration('flower','home-flower')}${e(t('archive'))}</h1></div>
+  return `<section class="archive-home"><div class="archive-home-heading"><h1>${e(t('archive'))}</h1></div>
     <div class="child-tabs" role="group" aria-label="${e(t('profiles'))}">
       ${profiles.map(c=>button('filterChild',c.name,'child-tab '+(filters.child===c.id?'active':''),'',`data-id="${e(c.id)}" aria-pressed="${filters.child===c.id}"`)).join('')}
     </div></section>`;
@@ -214,7 +218,7 @@ function archiveView(){
   return archiveHero()+demoBanner()+draftBanner()+
   '<div class="archive-search"><div class="search">'+icon('search')+'<input id="search" value="'+e(filters.search)+'" aria-label="'+e(t('search'))+'" placeholder="'+e(t('search'))+'"></div></div>'+
   '<details class="archive-options" '+(filtersExpanded?'open':'')+'><summary>'+icon('settings')+e(t('filters'))+'</summary><div class="filter-row"><div class="segmented">'+button('all',t('all'),!filters.favorite?'active':'')+button('favorites',t('favorites'),filters.favorite?'active':'','heart')+'</div><span class="spacer"></span><select id="year-filter" class="year-select" aria-label="'+e(t('anyYear'))+'">'+option('',t('anyYear'),filters.year)+years.map(y=>option(y,y,filters.year)).join('')+'</select></div>'+
-  '<div class="collection-label"><select id="sort" aria-label="'+e(t('newest'))+'" style="width:auto;border:0;background:none;padding:0;font-size:11px">'+[['newest','newest'],['oldest','oldest'],['age','byAge'],['category','byCategory']].map(([id,key])=>option(id,t(key),filters.sort)).join('')+'</select></div>'+
+  '<div class="collection-label"><select id="sort" aria-label="'+e(t('newest'))+'">'+[['newest','newest'],['oldest','oldest'],['age','byAge'],['category','byCategory']].map(([id,key])=>option(id,t(key),filters.sort)).join('')+'</select></div>'+
   '<div class="category-chips">'+button('category',t('anyCategory'),'chip '+(!filters.category?'active':''),'','data-category=""')+categories.map(c=>button('category',t(c),'chip '+(filters.category===c?'active':''),'','data-category="'+c+'"')).join('')+'</div>'+
   '<div class="age-filter-row"><select id="period-filter" aria-label="'+e(t('ageCollections'))+'">'+option('',t('allAges'),filters.period)+[...periods].sort((a,b)=>a-b).map(n=>option(String(n),periodText(n),filters.period)).join('')+'</select>'+
   '</div></details>'+
@@ -237,25 +241,25 @@ function albumCards(albums){
     ${albumCover(a,{caption:true,previewWork:true})}</button>`).join('')+'</div>';
 }
 function albumsView(){
-  return `<header class="section-hero albums-intro">${motif('flower','section-motif')}<h1>${e(t('albums'))}</h1>${button('newAlbum',t('createAlbum'),'primary','plus')}</header>`+
+  return `<header class="section-hero albums-intro"><h1>${e(t('albums'))}</h1>${button('newAlbum',t('createAlbum'),'primary','plus')}</header>`+
     demoBanner()+(state.albums.length?albumCards(state.albums):
-      '<div class="empty">'+motif('rainbow','empty-art')+'<h2>'+e(t('emptyAlbums'))+'</h2><p>'+e(t('emptyAlbumsHint'))+'</p></div>');
+      '<div class="empty">'+motif('arcs','empty-art')+'<h2>'+e(t('emptyAlbums'))+'</h2><p>'+e(t('emptyAlbumsHint'))+'</p></div>');
 }
 function settingsView(){
   const language=(code,label)=>button('language',label,lang===code?'primary':'secondary','',
     'data-language="'+code+'" aria-pressed="'+(lang===code)+'"');
-  return `<header class="section-hero settings-intro"><h1>${e(t('settings'))}</h1>${motif('flower','section-motif')}</header>
+  return `<header class="section-hero settings-intro"><h1>${e(t('settings'))}</h1></header>
     ${demoBanner()}<div class="settings-grid">
-      <section class="panel"><h2>${icon('photo')}${e(t('profiles'))}</h2>
+      <section class="panel settings-profiles"><h2>${icon('photo')}${e(t('profiles'))}</h2>${motif('loop','settings-pattern')}
       ${state.children.map(c=>`<div class="profile-row">${avatar(c)}<div>${e(c.name)}
         ${c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':''}</div>
         ${button('childPage',t('profile'),'text-button','','data-id="'+e(c.id)+'"')}</div>`).join('')}
       ${button('newChild',t('addChild'),'secondary','plus')}</section>
-      <section class="panel"><h2>${icon('settings')}${e(t('language'))}</h2>
+      <section class="panel settings-language"><h2>${icon('settings')}${e(t('language'))}</h2>${motif('checker','settings-pattern')}
         <div class="language-options">${Object.entries(languages).map(([code,label])=>language(code,label)).join('')}</div></section>
-      <section class="panel"><h2>${icon('download')}${e(t('backup'))}</h2>
-        <div class="settings-actions">${button('export',t('exportBackup'),'secondary','download')}${button('import',t('importBackup'),'secondary','upload')}</div>
-        <p class="warning">${e(t('backupWarning'))}</p></section>
+      <section class="panel settings-backup"><h2>${icon('download')}${e(t('backup'))}</h2>${motif('waves','settings-pattern')}
+        <div class="settings-actions">${button('export',t('exportBackup'),'secondary','download')}${button('import',t('importBackup'),'secondary','upload')}</div></section>
+      <aside class="warning backup-warning">${icon('lock')}<p>${e(t('backupWarning'))}</p></aside>
       <section class="panel"><h2>${icon('album')}${e(t('pdf'))}</h2>
         ${button('nav',t('albums'),'secondary','chevron','data-page="albums"')}</section>
       <section class="panel storage-info"><h2>${icon('lock')}${e(t('privacyTitle'))}</h2>
@@ -282,7 +286,7 @@ function childView(id){
   const child=state.children.find(c=>c.id===id);if(!child)return settingsView();
   const works=state.artworks.filter(w=>w.childId===id).sort((a,b)=>b.addedAt.localeCompare(a.addedAt));
   const albums=childAlbums(state,id);
-  return `<div class="dashboard child-story"><header class="welcome-paper">${motif('flower','profile-bloom')}${motif('sun','profile-sun')}${avatar(child)}<h1>${e(child.name)}</h1>
+  return `<div class="dashboard child-story"><header class="welcome-paper">${motif('arcs','profile-pattern')}${avatar(child)}<h1>${e(child.name)}</h1>
     <p>${[ageText(ageAt(child.birthDate,today())),countText(works.length)].filter(Boolean).map(e).join(' · ')}</p>
     <div class="buttons">${button('childWorks',t('allDrawings'),'primary','grid')}${button('editProfile',t('edit'),'secondary','edit')}</div></header>
     <section class="dashboard-section"><h2>${e(t('growingArt'))}</h2><div class="period-grid">${chapters(works,child).map(([period,n])=>

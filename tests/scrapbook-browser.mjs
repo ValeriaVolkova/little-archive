@@ -52,6 +52,12 @@ try{
   const gap=await page.locator('.welcome-paper + .dashboard-section').evaluate(el=>
     el.getBoundingClientRect().top-el.previousElementSibling.getBoundingClientRect().bottom);
   assert.ok(gap>=0&&gap<=24,'Unexpected gap between banner and chapters: '+gap);
+  await page.locator('.home-links [data-page=albums]').click();
+  await page.locator('.albums-intro').waitFor();
+  await page.locator('.mobile-nav [data-page=home]').click();
+  await page.locator('.home-links [data-page=archive]').click();
+  await page.locator('.archive-home').waitFor();
+  await page.locator('.mobile-nav [data-page=home]').click();
   await page.evaluate(()=>document.fonts.ready);
   await page.screenshot({path:join(output,'Home.png')});
   await page.locator('#chapter-child').scrollIntoViewIfNeeded();
@@ -67,6 +73,33 @@ try{
   const before=await signature();
   await browser.close();browser=await open();page=await browser.newPage();await page.goto(url);
   await page.locator('#chapter-child').waitFor();assert.deepEqual(await signature(),before);
+  await page.locator('.mobile-nav [data-page=settings]').click();
+  await page.evaluate(()=>{
+    document.documentElement.style.setProperty('--top-inset','47px');
+    document.documentElement.style.setProperty('--bottom-inset','34px');
+  });
+  for(const [code,title] of [['en','Settings'],['es','Ajustes'],['ru','Настройки']]){
+    await page.locator('.language-options [data-language='+code+']').click();
+    assert.equal(await page.locator('.settings-intro h1').textContent(),title);
+    const layout=await page.evaluate(()=>{
+      const rect=selector=>document.querySelector(selector).getBoundingClientRect();
+      const nav=rect('.mobile-nav'),topbar=rect('.topbar'),main=getComputedStyle(document.querySelector('.main'));
+      return {
+        top:topbar.top,bottom:innerHeight-nav.bottom,padding:parseFloat(main.paddingBottom),navHeight:nav.height,
+        overflow:document.documentElement.scrollWidth>innerWidth,
+        targets:[...document.querySelectorAll('.mobile-nav button,.settings-actions button,.language-options button')]
+          .every(el=>el.offsetHeight>=44&&el.offsetWidth>=44)
+      };
+    });
+    assert.ok(!layout.overflow&&layout.targets&&layout.top>=47&&layout.bottom>=34&&
+      layout.padding>=layout.navHeight+layout.bottom,JSON.stringify(layout));
+  }
+  await page.evaluate(()=>{
+    document.documentElement.style.removeProperty('--top-inset');
+    document.documentElement.style.removeProperty('--bottom-inset');
+  });
+  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+  await page.screenshot({path:join(output,'Settings-backup.png')});
   assert.deepEqual(before.archive.albums.find(a=>a.id===albums.id).orderedArtworkIds,albums.order);
   await page.locator('.mobile-nav [data-page=archive]').click();
   await page.locator('.masonry img').first().evaluate(img=>img.decode());
@@ -98,6 +131,12 @@ try{
   assert.equal(await page.locator('.masonry button').count(),72);
   await page.locator('.masonry button').first().click();
   await page.locator('#modal [data-action=edit]').click();
+  await page.locator('#photo-list img').first().evaluate(image=>image.decode());
+  await page.screenshot({path:join(output,'Artwork-editor.png'),animations:'disabled'});
+  await page.locator('#photo-list [data-action=crop]').first().click();
+  await page.locator('.crop-dialog [data-op=enhance]').click();
+  await page.screenshot({path:join(output,'Crop.png'),animations:'disabled'});
+  await page.locator('.crop-dialog [data-op=cancel]').click();
   const title=page.locator('#artwork-form input[name=title]');
   await title.fill('Unsaved edit');
   let prompted=false;

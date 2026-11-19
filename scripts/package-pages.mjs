@@ -11,9 +11,9 @@ const allowedFiles=[
   'index.html','manifest.webmanifest','style.css','editorial.css','playful.css','sw.js',
   'app.js','album-ux.js','pwa-update.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
   'vendor/heic-to.js','vendor/heic-to.LICENSE.txt','crop-editor.js','scrapbook.js','media.js','pdf.js','storage-codec.js','storage-error.js','ui.js','zip.js',
-  'assets/playful-motifs.svg','assets/fonts/BalsamiqSans-Regular.ttf','assets/fonts/BalsamiqSans-Bold.ttf','assets/fonts/BalsamiqSans-OFL.txt','assets/background-doodles.svg','assets/fish.svg','assets/flowers.svg',
+  'assets/playful-motifs.svg','assets/fonts/Onest.ttf','assets/fonts/Onest-OFL.txt','assets/fish.svg','assets/flowers.svg',
   'assets/house.svg','assets/icon.svg','assets/leaf.svg','assets/rainbow.svg',
-  'assets/sun.svg','assets/fonts/Nunito.ttf','assets/fonts/OFL.txt',
+  'assets/sun.svg',
   'vendor/pdf-lib.min.js','vendor/pdf-lib.LICENSE.md'
 ];
 const source=fileURLToPath(new URL('../dist/',import.meta.url));

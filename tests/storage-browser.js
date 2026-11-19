@@ -125,7 +125,7 @@ async function run(){
     const cache=(await caches.keys()).find(name=>name.startsWith('little-archive-pages-shell:'+registration.scope+':'));
     assert(cache,'Pages shell cache was not installed');
     const shell=await caches.open(cache);
-    for(const asset of ['index.html','app.js','style.css','editorial.css','assets/icon.svg','assets/fonts/Nunito.ttf','manifest.webmanifest']){
+    for(const asset of ['index.html','app.js','style.css','editorial.css','assets/icon.svg','assets/fonts/Onest.ttf','manifest.webmanifest']){
       assert(await shell.match(base+asset),'Missing response in Pages shell cache: '+asset);
     }
     passed.push('Pages artifact opens under a project subpath and installs a scoped Service Worker shell');
