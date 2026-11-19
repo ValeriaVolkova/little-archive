@@ -164,7 +164,40 @@ async function run(){
   for(const path of originals)equal(await bytes(await readFile(path)),expected,'Full restore lost an original');
   passed.push('Full restore into empty test storage saves every original and record');
   await checkPhaseTwo(db,photo,expected);
+  await checkExportRefusal(db);
   await report({passed});
+}
+
+async function checkExportRefusal(db){
+  const collection=await readArchive();
+  for(let i=0;i<530;i++)collection.albums.push({id:'large-'+i,title:'Album',description:'n'.repeat(20000),
+    childId:null,coverStyle:'warm',orderedArtworkIds:[]});
+  await commit(collection);
+  const before=await readArchive();
+  const keys=()=>request(db.transaction('files').objectStore('files').getAllKeys());
+  const paths=await keys(),originalBytes=await Promise.all(paths.map(async path=>bytes(await readFile(path))));
+  const frame=appFrame();
+  const find=selector=>waitFor(()=>frame.contentDocument?.querySelector(selector));
+  await find('.archive-home');
+  let downloads=0;
+  frame.contentDocument.addEventListener('click',event=>{
+    if(event.target.closest('a[download]')){downloads++;event.preventDefault();}
+  },true);
+  (await find('.mobile-nav [data-page=settings]')).click();
+  for(const [language,phrase] of [['ru','ZIP не создан'],['en','No ZIP was created'],['es','No se ha creado el ZIP']]){
+    (await find('[data-language='+language+']')).click();
+    (await find('[data-action=export]')).click();
+    const alert=await find('.modal-body [role=alert]');
+    assert(alert.textContent.includes(phrase),'Missing localized export refusal: '+language);
+    assert(!frame.contentDocument.querySelector('#toast.show'),'Export showed a success toast');
+    (await find('.modal-header [data-action=close]')).click();
+  }
+  frame.remove();
+  assert(downloads===0,'Unsupported ZIP was offered for download');
+  equal(await readArchive(),before,'Failed export changed stored archive or revision');
+  equal(await keys(),paths,'Failed export changed file keys');
+  for(const [i,path] of paths.entries())equal(await bytes(await readFile(path)),originalBytes[i],'Failed export changed stored bytes');
+  passed.push('Oversize export in RU/EN/ES shows an error without download or success; persisted metadata and every file are identical');
 }
 
 async function checkPhaseTwo(db,photo,expected){

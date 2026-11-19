@@ -1,19 +1,21 @@
 import {mergeArchives,validateArchive,profilePhoto} from './domain.js';
 import {loadImage,raster} from './media.js';
-import {readZip,writeZip} from './zip.js';
+import {checkZipLimit,readZip,writeZip} from './zip.js';
 
 export async function createBackup(state,getFile,onProgress){
   const snapshot=structuredClone(state);
   delete snapshot.revision;
+  validateArchive(snapshot,{allowInvalidDates:true});
   const manifest={format:'little-archive',formatVersion:1,exportedAt:new Date().toISOString(),archive:snapshot};
   const files=[['manifest.json',new Blob([JSON.stringify(manifest)],{type:'application/json'})]];
+  checkZipLimit('manifest',files[0][1].size);
   for(const child of snapshot.children){
     const path=profilePhoto(child);
-    if(path)files.push([path,await getFile(path)]);
+    if(path)files.push([path,()=>getFile(path)]);
   }
   for(const image of snapshot.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
-      files.push([path,await getFile(path)]);
+      files.push([path,()=>getFile(path)]);
     }
   }
   return writeZip(files,onProgress);
@@ -22,8 +24,7 @@ export async function createBackup(state,getFile,onProgress){
 const imageTypes={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',heic:'image/heic',heif:'image/heif'};
 
 export async function inspectBackup(file,onProgress=()=>{}){
-  const zip=await readZip(file),manifestBlob=await zip.get('manifest.json');
-  if(manifestBlob.size>10*1024*1024)throw Error('Manifest too large');
+  const zip=await readZip(file),manifestBlob=await zip.get('manifest.json','manifest');
   const manifest=JSON.parse(await manifestBlob.text());
   if(manifest.format!=='little-archive'||manifest.formatVersion!==1)throw Error('Unknown format');
   const incoming=validateArchive(manifest.archive,{allowInvalidDates:true}),verifiedFiles=new Map();

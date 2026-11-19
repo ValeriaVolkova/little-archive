@@ -6,6 +6,7 @@ import {storageErrorKey} from './storage-error.js';
 import {draftQueue} from './draft-queue.js';
 import {emptyArchive,today,validDate,ageAt,albumMembers,profilePhoto,childAlbums,archiveFilters,dashboardData,filterWorks,deleteWork,validateArchive,categories,displayCategory,workCategory} from './domain.js';
 import {createBackup,inspectBackup,planRestore} from './backup-restore.js';
+import {BackupLimitError} from './zip.js';
 import {readArchive,readFile,commit,clientId,readDrafts,saveDraft} from './db.js';
 import {appName,languages,localizeDocument,t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
 import {preparePhoto,raster,loadImage,download,photoDate,chooseArtworkDate} from './media.js';
@@ -712,8 +713,14 @@ async function exportBackup(){
   progress(t('exportBackup'));
   try{
     const zip=await createBackup(state,getFile,(n,total)=>modal.querySelector('#progress').textContent=n+' / '+total);
-    busy=false;closeModal(true);download(zip,appName+'-'+today()+'.zip');toast(t('backupDone'));
-  }catch{busy=false;inlineError(t('saveError'));}
+    download(zip,appName+'-'+today()+'.zip');busy=false;closeModal(true);toast(t('backupDone'));
+  }catch(error){
+    busy=false;
+    const key=error instanceof BackupLimitError
+      ?(error.limit==='manifest'?'backupManifestTooLarge':'backupTooLarge')
+      :'backupExportFailed';
+    showModal(modalHeader(t('error'))+'<div class="modal-body"><p role="alert">'+e(t(key))+'</p></div>',{narrow:true});
+  }
 }
 async function importBackup(file){
   progress(t('importCheck'));
@@ -729,7 +736,7 @@ async function importBackup(file){
         busy=false;closeModal(true);openArchive();toast(t('imported'));
       }catch{inlineError(t('invalidBackup'));}finally{busy=false;}
     }});
-  }catch{busy=false;showModal(modalHeader(t('error'))+'<div class="modal-body"><p class="help">'+e(t('invalidBackup'))+'</p></div>',{narrow:true});}
+  }catch(error){busy=false;showModal(modalHeader(t('error'))+'<div class="modal-body"><p class="help">'+e(t(error instanceof BackupLimitError?'backupTooLarge':'invalidBackup'))+'</p></div>',{narrow:true});}
 }
 const backupInput=document.createElement('input');backupInput.type='file';backupInput.accept='.zip,application/zip';backupInput.hidden=true;document.body.append(backupInput);backupInput.onchange=()=>{if(backupInput.files[0])importBackup(backupInput.files[0]);backupInput.value='';};
 app.onclick=async event=>{

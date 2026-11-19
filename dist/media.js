@@ -75,7 +75,13 @@ export async function preparePhoto(file){
   return {blob:file,preview:image,width:image.naturalWidth,height:image.naturalHeight,thumb:(await raster(image,640)).blob};
 }
 export function download(blob,name){
-  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);
+  const a=document.createElement('a'),url=URL.createObjectURL(blob);
+  try{
+    a.href=url;a.download=name;document.body.append(a);a.click();
+  }catch(error){
+    URL.revokeObjectURL(url);throw error;
+  }finally{a.remove();}
+  setTimeout(()=>URL.revokeObjectURL(url),120000);
 }
 // Read only JPEG EXIF DateTimeOriginal. A file modification time or generic
 // EXIF edit timestamp cannot reliably identify the capture date.
