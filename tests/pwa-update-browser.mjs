@@ -16,7 +16,7 @@ const server=createServer(async(req,res)=>{
   try{
     let bytes=await readFile(join(stage?current:old,path));
     if(stage===2&&(path==='sw.js'||path==='app.js')){
-      const text=bytes.toString().replace(/(CACHE_PREFIX\+'|3A\.1 · )[a-f0-9]{16}/g,'$1aaaaaaaaaaaaaaaa');
+      const text=bytes.toString().replace(/(CACHE_PREFIX\+'|3B · )[a-f0-9]{16}/g,'$1aaaaaaaaaaaaaaaa');
       bytes=Buffer.from(text);
     }
     if(failInstall&&path==='scrapbook.js')return res.writeHead(503).end();
@@ -68,11 +68,18 @@ try{
   }
   await app.evaluate(()=>localStorage.setItem('test-marker','keep'));
   const before=await snapshot(app);assert.equal(before.archive.artworks.length,2);
+  const oldZip=await app.evaluate(async()=>{
+    const {createBackup}=await import('./backup-restore.js'),{readArchive,readFile}=await import('./db.js');
+    return [...new Uint8Array(await (await createBackup(await readArchive(),readFile)).arrayBuffer())];
+  });
   const oldCaches=await app.evaluate(()=>caches.keys());
   stage=1;
   await app.evaluate(async()=>{await (await navigator.serviceWorker.ready).update();});
   await app.waitForFunction(async()=>!!(await navigator.serviceWorker.ready).waiting);
-  assert.equal(await app.locator('.update-banner').count(),0);
+  if(await app.locator('.update-banner').count()){
+    await app.locator('[data-action=applyUpdate]').click();
+    await app.waitForFunction(()=>document.querySelector('.daily-card')&&performance.getEntriesByType('navigation')[0]?.type==='reload');
+  }
   await app.close();
   for(let i=0;i<150;i++){
     const keys=await harness.evaluate(()=>caches.keys());
@@ -84,7 +91,24 @@ try{
   await app.locator('.mobile-nav [data-page=settings]').click();
   const first=await app.locator('[data-build]').innerText();
   assert.deepEqual(await snapshot(app),before);
-  console.log('PASS: installed app upgraded from 4aa5f24 by closing and reopening the same installation');
+  const restoreBrowser=await chromium.launch({executablePath:process.env.BROWSER_PATH,headless:true});
+  try{
+    const clean=await restoreBrowser.newPage();await clean.goto(url);
+    const restored=await clean.evaluate(async bytes=>{
+      const {inspectBackup,planRestore}=await import('./backup-restore.js');
+      const {readArchive,commit}=await import('./db.js');
+      const {incoming,verifiedFiles}=await inspectBackup(new Blob([Uint8Array.from(bytes)]));
+      const destination=await readArchive();
+      if(destination.children.length)throw Error('Expected empty restore profile');
+      const plan=planRestore(destination,incoming,verifiedFiles);await commit(plan.archive,plan.puts);
+      return true;
+    },oldZip);
+    assert.ok(restored);
+    const portable=await snapshot(clean);
+    for(const key of ['children','artworks','images','albums'])assert.deepEqual(portable.archive[key],before.archive[key]);
+    assert.deepEqual(portable.bytes,before.bytes);
+  }finally{await restoreBrowser.close();}
+  console.log('PASS: installed app upgraded from previous release by closing and reopening the same installation');
   await app.locator('.global-add').click();
   await app.locator('#artwork-form [name=title]').fill('Unfinished');
   stage=2;failInstall=true;

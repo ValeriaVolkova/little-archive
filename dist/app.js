@@ -3,7 +3,7 @@ import {dailyMemory,chapters,layoutGallery} from './scrapbook.js';
 import {editCrop} from './crop-editor.js';
 import {storageErrorKey} from './storage-error.js';
 import {draftQueue} from './draft-queue.js';
-import {emptyArchive,today,validDate,ageAt,archiveFilters,dashboardData,filterWorks,deleteWork,validateArchive,categories,displayCategory,workCategory} from './domain.js';
+import {emptyArchive,today,validDate,ageAt,albumMembers,profilePhoto,childAlbums,archiveFilters,dashboardData,filterWorks,deleteWork,validateArchive,categories,displayCategory,workCategory} from './domain.js';
 import {createBackup,inspectBackup,planRestore} from './backup-restore.js';
 import {readArchive,readFile,commit,clientId,readDrafts,saveDraft} from './db.js';
 import {t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
@@ -13,6 +13,7 @@ import {decoration,coverDecoration,albumTheme} from './ui.js';
 
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 let state=emptyArchive(),realState,demonstration=false,page='home',filters=archiveFilters(),busy=false,dirty=false,stale=false;
+let section=null;
 let drafts=[],draftActive=false,draftState="idle";
 const lastChildKey='little-archive-last-child';
 function preferredChild(){
@@ -23,7 +24,7 @@ function preferredChild(){
 function rememberChild(id){try{localStorage.setItem(lastChildKey,id);}catch{}}
 // One history entry per open modal, including transitions from detail to edit.
 let dismissingFromHistory=false,consumingModalEntry=false;
-function routeState(){return {archivePage:page,filters:{...filters},chapterChild,scroll:window.scrollY};}
+function routeState(){return {archivePage:page,section,filters:{...filters},chapterChild,scroll:window.scrollY};}
 function rememberRoute(){history.replaceState(routeState(),'');}
 function pushRoute(){history.pushState(routeState(),'');}
 window.addEventListener('popstate',event=>{
@@ -37,7 +38,7 @@ window.addEventListener('popstate',event=>{
   }
   const route=event.state;
   if(route?.archivePage){
-    page=route.archivePage;filters={...archiveFilters(),...route.filters};chapterChild=route.chapterChild||'';
+    page=route.archivePage;section=route.section||null;filters={...archiveFilters(),...route.filters};chapterChild=route.chapterChild||'';
     render();window.scrollTo(0,route.scroll||0);
   }
 });
@@ -78,7 +79,7 @@ function clearURLs(){for(const url of urlCache.values())URL.revokeObjectURL(url)
 function temporaryURL(blob){const url=URL.createObjectURL(blob);modalUrls.push(url);return url;}
 const imageObservers=new WeakMap();
 function hydrate(root=app){
-  if(root===app)layoutGallery(root.querySelector('.masonry'));
+  layoutGallery(root.querySelector('.masonry'),root);
   imageObservers.get(root)?.disconnect();
   const load=async image=>{
     image.dataset.visible='1';
@@ -109,7 +110,7 @@ function closeModal(force=false){
   if(busy&&!force){toast(t('busyClose'));return;}
   if(dirty&&!force&&draftActive&&draftState!=='saved'){toast(t(draftState==='saving'?'draftSaving':'draftError'));return;}
   if(dirty&&!force&&!confirm(t(draftActive?'draftClose':'discard')))return;
-  dirty=false;imageObservers.get(modal)?.disconnect();modal.close();modalCleanup();modalCleanup=()=>{};draftActive=false;modal.innerHTML='';modalAction=null;
+  dirty=false;layoutGallery(null,modal);imageObservers.get(modal)?.disconnect();modal.close();modalCleanup();modalCleanup=()=>{};draftActive=false;modal.innerHTML='';modalAction=null;
   for(const url of modalUrls.splice(0))URL.revokeObjectURL(url);
 }
 modal.addEventListener('close',()=>{
@@ -127,7 +128,7 @@ const footer=(label=t('save'),action='submit')=>'<footer class="modal-footer">'+
 modal.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
 modal.addEventListener('click',event=>{const el=event.target.closest('[data-action]');if(!el)return;if(el.dataset.action==='close')closeModal();else if(modalAction)Promise.resolve(modalAction(el.dataset.action,el,event)).catch(()=>inlineError(t('saveError')));});
 
-const buildVersion='3A.1-local';
+const buildVersion='3B-local';
 let pendingActions=0;
 const updates=updateManager({
   safe:()=>!busy&&!dirty&&!pendingActions&&!document.querySelector('dialog[open]'),
@@ -147,11 +148,11 @@ function render(){
   if(filters.child&&!state.children.some(c=>c.id===filters.child))filters.child='';
   document.documentElement.lang=lang;app.dataset.page=page;
   app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/icon.svg" alt=""><div><strong>Little Archive</strong><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
-  '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="filterChild" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
+  '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="childPage" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
   button('newChild',t('addChild'),'child-filter add','plus')+'<div class="side-foot">'+icon('lock')+'<div>'+e(t('local'))+'<br>'+e(t('private'))+'</div></div></aside><main class="main">'+
   '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">Little Archive</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span><button class="language '+(lang==='ru'?'active':'')+'" data-action="language" data-language="ru" aria-label="Русский">RU</button><button class="language '+(lang==='en'?'active':'')+'" data-action="language" data-language="en" aria-label="English">EN</button>'+(page!=='home'?button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"'):'')+'</div></div>'+
   '<section class="update-banner panel" hidden><span role="status"></span>'+button('applyUpdate',t('applyUpdate'),'secondary')+'</section>'+
-  ({home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
+  (section?.type==='album'?albumView(section.id):section?.type==='child'?childView(section.id):{home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
   hydrate();updates.show();
 }
 let chapterChild='', filtersExpanded=false;
@@ -185,7 +186,7 @@ function dashboardView(){
       ${memory.notes?`<span class="memory-note">${e(memory.notes)}</span>`:''}</span></button>`:
       `<p class="dashboard-empty">${e(t('emptyHint'))}</p>`}</section>
     ${child?`<section class="dashboard-section"><h2>${e(t('growingArt'))}</h2>
-      <label class="chapter-profile">${e(t('child'))} <select id="chapter-child">${state.children.map(c=>option(c.id,c.name,child.id)).join('')}</select></label>
+      <label class="chapter-profile">${e(t('child'))} <select id="chapter-child">${state.children.map(c=>option(c.id,c.name,child.id)).join('')}</select> ${button('childPage',t('profile'),'text-button','','data-id="'+e(child.id)+'"')}</label>
       <div class="period-grid">${chapters(state.artworks,child).map(([period,count])=>
       `<button class="period-card tone-${period%5}" data-action="openPeriod" data-id="${e(child.id)}" data-period="${period}">
       <strong>${e(periodText(period))}</strong><span>${e(countText(count))}</span></button>`).join('')||`<p class="dashboard-empty">${e(t('emptyChapters'))}</p>`}</div></section>`:''}</div>`;
@@ -210,10 +211,10 @@ function archiveHero(){
     </div></section>`;
 }
 function option(value,label,selected){return '<option value="'+e(value)+'" '+(value===selected?'selected':'')+'>'+e(label)+'</option>';}
-function workCard(w){
+function workCard(w,action='detail',selected=false,disabled=false){
   const image=imagesById.get(w.coverImageId);
   const label=[displayTitle(w)||t('untitled'),childLabel(w.childId),validDate(w.artworkDate)?dateText(w.artworkDate):''].filter(Boolean);
-  return `<article class="work-card" data-ratio="${image.height/image.width}"><button class="work-open" data-action="detail" data-id="${e(w.id)}" aria-label="${e(label[0])} · ${label[1]} ${e(label[2])}">
+  return `<article class="work-card" data-ratio="${image.height/image.width}"><button class="work-open" data-action="${action}" ${action==='pick'?'aria-pressed="'+selected+'"':''} ${disabled?'disabled':''} data-id="${e(w.id)}" aria-label="${e(label[0])} · ${label[1]} ${e(label[2])}">
     <img loading="lazy" decoding="async" width="${image.width}" height="${image.height}" data-path="${e(coverPath(w))}" alt=""></button></article>`;
 }
 function emptyView(title,message,action,label,symbol='frame'){return '<div class="empty empty-'+symbol+'">'+decoration(symbol,'empty-art')+'<h2>'+e(title)+'</h2><p>'+e(message)+'</p>'+button(action,label,'primary',action==='clear'?'arrow':'plus')+'</div>';}
@@ -222,7 +223,7 @@ function hasArchiveFilters(){
   return Object.keys(defaults).some(key=>filters[key]!==defaults[key]);
 }
 function archiveResults(works){
-  if(works.length)return '<div class="art-grid masonry">'+works.map(workCard).join('')+'</div>';
+  if(works.length)return '<div class="art-grid masonry">'+works.map(w=>workCard(w)).join('')+'</div>';
   if(state.artworks.length)return emptyView(t('noMatches'),t('noMatchesHint'),'clear',t('clearFilters'),'search');
   if(!state.children.length)return emptyView(t('empty'),t('welcomeFirst'),'newChild',t('addFirstChild'),'frame');
   return emptyView(t('empty'),t('emptyHint'),'newWork',t('firstArtwork'),'frame');
@@ -239,30 +240,98 @@ function archiveView(){
   '<div class="age-filter-row"><select id="period-filter" aria-label="'+e(t('ageCollections'))+'">'+option('',t('allAges'),filters.period)+[...periods].sort((a,b)=>a-b).map(n=>option(String(n),periodText(n),filters.period)).join('')+'</select>'+
   '</div></details>'+
   '<div class="collection-label"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong>'+ button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+'</div>'+
-  '<div id="archive-results">'+archiveResults(works)+'</div>';
+  (works.length?button('pickForAlbum',t('selectWorks'),'text-button'):'')+'<div id="archive-results">'+archiveResults(works)+'</div>';
 }
-function albumsView(){return hero(t('albumHeadline'),t('albumSubtitle'),'newAlbum',t('createAlbum'))+demoBanner()+(state.albums.length?'<div class="album-grid">'+state.albums.map(a=>{const theme=albumTheme(a.id);return '<button class="book-card" data-action="album" data-id="'+e(a.id)+'"><div class="album-cover theme-'+theme+'">'+coverDecoration(theme)+'<div class="book-imprint">Little Archive</div><h3>'+e(a.title)+'</h3><div class="book-owner">'+childLabel(a.childId)+'</div><div class="book-number">'+e(t('theme'+theme))+'</div></div><div class="book-caption"><span>'+e(countText(a.orderedArtworkIds.length))+'</span>'+icon('chevron')+'</div></button>';}).join('')+'</div>':emptyView(t('emptyAlbums'),t('emptyAlbumsHint'),'newAlbum',t('createAlbum'),'book'));}
-function settingsView(){return hero(t('settingsHeadline'),t('local'))+demoBanner()+'<div class="settings-grid"><section class="panel"><h2>'+icon('photo')+e(t('profiles'))+'</h2>'+state.children.map(c=>'<div class="profile-row"><span class="child-dot" style="background:'+e(c.color)+'40">'+e(c.name[0])+'</span><div>'+e(c.name)+(c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':'')+'</div>'+button('editChild',t('edit'),'text-button','','data-id="'+e(c.id)+'"')+'</div>').join('')+button('newChild',t('addChild'),'secondary','plus')+'</section>'+
+function albumCover(a){
+  const work=state.artworks.find(w=>w.id===(a.coverArtworkId||a.orderedArtworkIds[0]));
+  return work?'<img class="book-photo" data-path="'+e(coverPath(work))+'" alt="">':coverDecoration(albumTheme(a.id));
+}
+function albumCards(albums){
+  return '<div class="album-grid">'+albums.map(a=>`<button class="book-card" data-action="album" data-id="${e(a.id)}">
+    <div class="album-cover theme-${albumTheme(a.id)}">${albumCover(a)}<h3>${e(a.title)}</h3></div>
+    <div class="book-caption"><span>${e(countText(a.orderedArtworkIds.length))}</span>${icon('chevron')}</div></button>`).join('')+'</div>';
+}
+function albumsView(){
+  return hero(t('albums'),t('albumSubtitle'),'newAlbum',t('createAlbum'))+demoBanner()+
+    (state.albums.length?albumCards(state.albums):'<div class="empty">'+decoration('book','empty-art')+'<h2>'+e(t('emptyAlbums'))+'</h2><p>'+e(t('emptyAlbumsHint'))+'</p></div>');
+}
+function settingsView(){return hero(t('settingsHeadline'),t('local'))+demoBanner()+'<div class="settings-grid"><section class="panel"><h2>'+icon('photo')+e(t('profiles'))+'</h2>'+state.children.map(c=>'<div class="profile-row"><span class="child-dot" style="background:'+e(c.color)+'40">'+e(c.name[0])+'</span><div>'+e(c.name)+(c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':'')+'</div>'+button('childPage',t('profile'),'text-button','','data-id="'+e(c.id)+'"')+'</div>').join('')+button('newChild',t('addChild'),'secondary','plus')+'</section>'+
   '<section class="panel"><h2>'+icon('download')+e(t('backup'))+'</h2><p>'+e(t('backupHint'))+'</p><div class="buttons">'+button('export',t('exportBackup'),'secondary','download')+button('import',t('importBackup'),'secondary','upload')+'</div><p class="warning">'+e(t('backupWarning'))+'</p></section>'+
   '<section class="panel"><h2>'+icon('lock')+e(t('privacyTitle'))+'</h2><p>'+e(t('privacyBody'))+'</p><p>'+e(t('appVersion'))+' · <code data-build>'+e(buildVersion)+'</code></p><p class="web-note">'+e(t('webNote'))+'</p></section><section class="panel"><h2>'+e(t('language'))+'</h2><div class="buttons">'+button('language','Русский',lang==='ru'?'primary':'secondary','','data-language="ru"')+button('language','English',lang==='en'?'primary':'secondary','','data-language="en"')+'</div></section></div>';}
-function openArchive(period='',child=''){clearTimeout(searchTimer);filters={...archiveFilters(),period,child};page='archive';render();window.scrollTo(0,0);}
+function openArchive(period='',child=''){clearTimeout(searchTimer);filters={...archiveFilters(),period,child};page='archive';section=null;render();window.scrollTo(0,0);}
 async function enterOwn(){demonstration=false;state=realState;page='home';filters=archiveFilters();clearURLs();render();if(!state.children.length)profileEditor();}
 
+function showSection(type,id){
+  if(!modal.open&&!history.state?.archiveModal)rememberRoute();
+  section={type,id};page=type==='album'?'albums':'settings';render();window.scrollTo(0,0);
+  if(!history.state?.archiveModal)pushRoute();
+}
+const albumDetail=id=>showSection('album',id);
+const childPage=id=>showSection('child',id);
+function avatar(child){
+  return profilePhoto(child)?'<img class="profile-avatar" data-path="'+e(profilePhoto(child))+'" alt="">':
+    '<span class="child-dot profile-avatar" style="background:'+e(child.color)+'38">'+e(child.name[0])+'</span>';
+}
+function childView(id){
+  const child=state.children.find(c=>c.id===id);if(!child)return settingsView();
+  const works=state.artworks.filter(w=>w.childId===id).sort((a,b)=>b.addedAt.localeCompare(a.addedAt));
+  const albums=childAlbums(state,id);
+  return `<div class="dashboard child-story"><header class="welcome-paper">${avatar(child)}<h1>${e(child.name)}</h1>
+    <p>${[ageText(ageAt(child.birthDate,today())),countText(works.length)].filter(Boolean).map(e).join(' · ')}</p>
+    <div class="buttons">${button('childWorks',t('allDrawings'),'primary','grid')}${button('editProfile',t('edit'),'secondary','edit')}</div></header>
+    <section class="dashboard-section"><h2>${e(t('growingArt'))}</h2><div class="period-grid">${chapters(works,child).map(([period,n])=>
+      `<button class="period-card tone-${period%5}" data-action="openPeriod" data-period="${period}" data-id="${e(id)}"><strong>${e(periodText(period))}</strong><span>${e(countText(n))}</span></button>`).join('')||e(t('emptyChapters'))}</div></section>
+    <section class="dashboard-section"><h2>${e(t('recentMemories'))}</h2><div class="memory-grid">${works.slice(0,3).map(w=>
+      `<button class="memory-card" data-action="detail" data-id="${e(w.id)}"><img data-path="${e(coverPath(w))}" alt=""><strong>${e(displayTitle(w)||t('untitled'))}</strong></button>`).join('')||e(t('noWorks'))}</div></section>
+    <section class="dashboard-section"><h2>${e(t('albums'))}</h2>${albums.length?albumCards(albums):e(t('emptyAlbums'))}</section></div>`;
+}
 function profileEditor(id){
   const child=state.children.find(c=>c.id===id);
   const first=!child&&!state.children.length;
   showModal(modalHeader(child?t('profile'):t(first?'addFirstChild':'addChild'))+`<form id="profile-form"><div class="modal-body">
     <label class="field">${e(t('name'))}<input name="name" maxlength="120" required autocomplete="given-name" value="${e(child?.name||'')}"></label>
     <label class="field">${e(t(first?'requiredBirthday':'birthday'))}<input type="date" name="birthday" max="${today()}" ${first?'required':''} value="${e(child?.birthDate||'')}"></label>
-    ${first?'':`<label class="field">${e(t('color'))}<input type="color" name="color" value="${e(child?.color||'#879989')}"></label>`}</div>${footer()}</form>`,{narrow:true,action:async action=>{if(action==='submit'&&!busy)modal.querySelector('form').requestSubmit();}});
+    <div id="avatar-preview">${child?avatar(child):''}</div><label class="field">${e(t('profilePhoto'))}<input type="file" id="avatar-file" accept="image/*,.heic,.heif"></label>
+    ${button('removeAvatar',t('removePhoto'),'text-button','','id="remove-avatar"')}${child?button('deleteProfile',t('deleteProfile'),'text-button danger') :''}
+    <div class="inline-error" role="alert"></div>${first?'':`<label class="field">${e(t('color'))}<input type="color" name="color" value="${e(child?.color||'#879989')}"></label>`}</div>${footer()}</form>`,{narrow:true,action:async action=>{if(busy)return;
+    if(action==='submit')modal.querySelector('form').requestSubmit();
+    if(action==='removeAvatar'){photo=null;dirty=true;paintAvatar();}
+    if(action==='deleteProfile'){
+      if(state.artworks.some(w=>w.childId===id)||state.albums.some(a=>a.childId===id)||drafts.some(d=>d.work?.childId===id)){inlineError(t('profileInUse'));return;}
+      if(!confirm(t('confirmProfileDelete')))return;
+      busy=true;try{
+        const next=structuredClone(state);next.children=next.children.filter(c=>c.id!==id);
+        await persist(next,[],profilePhoto(child)?[profilePhoto(child)]:[]);
+        section=null;closeModal(true);render();
+      }catch{inlineError(t('saveError'));}finally{busy=false;}
+    }}});
   const form=modal.querySelector('form');form.oninput=()=>dirty=true;
+  let photo; // undefined keeps the current avatar; null removes it.
+  function paintAvatar(){
+    const preview=form.querySelector('#avatar-preview');
+    preview.innerHTML=photo?'<img class="profile-avatar" src="'+temporaryURL(photo)+'" alt="">':
+      child?avatar(photo===null?{...child,profileImagePath:null}:child):'';
+    form.querySelector('#remove-avatar').hidden=!(photo||(photo===undefined&&child&&profilePhoto(child)));
+  }
+  paintAvatar();hydrate(modal);
+  form.querySelector('#avatar-file').onchange=async event=>{
+    const file=event.target.files[0];if(!file||busy)return;
+    busy=true;try{photo=(await preparePhoto(file)).thumb;dirty=true;paintAvatar();inlineError('');}
+    catch{inlineError(t('imageError'));}finally{busy=false;event.target.value='';}
+  };
   form.onsubmit=async event=>{
     event.preventDefault();if(busy)return;const f=new FormData(form),name=f.get('name').trim();if(!name)return;
     if(first&&!validDate(f.get('birthday'))){inlineError(t('saveInvalid'));return;}
     busy=true;
     try{const next=structuredClone(state),record={profileImagePath:null,...child,id:id||crypto.randomUUID(),name,birthDate:f.get('birthday')||null,color:f.get('color')||'#879989'};
       if(child)next.children[next.children.findIndex(c=>c.id===id)]=record;else next.children.push(record);
-      await persist(next);
+      const puts=[],deletes=[];
+      if(photo!==undefined){
+        if(child&&profilePhoto(child))deletes.push(profilePhoto(child));
+        record.profileImagePath=photo?'profiles/'+record.id+'/'+crypto.randomUUID()+'.jpg':null;
+        if(photo)puts.push([record.profileImagePath,photo]);
+      }
+      await persist(next,puts,deletes);
       if(first){page='home';rememberChild(record.id);}
       busy=false;closeModal(true);render();toast(t('profileSaved'));
     }catch(err){inlineError(t(storageErrorKey(err)));}finally{busy=false;}
@@ -394,7 +463,7 @@ async function artworkEditor(id,recovered=null){
         if(!p.meta||p.changed||p.generatedThumb)puts.push([originalPath+'.thumb',p.thumb]);
         next.images.push({...p.meta,id:p.id,artworkId,originalPath,editedPath,...(p.changed||p.cropSettings?{cropSettings:p.cropSettings??null}:{}),width:p.width,height:p.height,sortOrder:p.meta?.sortOrder??order});
       }
-      for(const album of next.albums)if(album.childId!==record.childId)album.orderedArtworkIds=album.orderedArtworkIds.filter(x=>x!==artworkId);
+      next.albums=next.albums.map(a=>a.childId&&a.childId!==record.childId?albumMembers(a,a.orderedArtworkIds.filter(x=>x!==artworkId)):a);
       await persist(next,puts,deletes,!id&&!demonstration?{id:draftId,revision:draftRevision}:null);
       if(!demonstration)rememberChild(record.childId);
       busy=false;closeModal(true);
@@ -430,44 +499,121 @@ async function artworkDetail(id,index=0){
 }
 async function toggleFavorite(id){const next=structuredClone(state),w=next.artworks.find(w=>w.id===id);w.isFavorite=!w.isFavorite;await persist(next);render();}
 
+function albumView(id){
+  const a=state.albums.find(a=>a.id===id);if(!a)return albumsView();
+  const works=new Map(state.artworks.map(w=>[w.id,w]));
+  return `<div class="dashboard album-story"><header class="panel album-front">
+    <div class="album-portrait theme-${albumTheme(id)}">${albumCover(a)}</div>
+    <h1>${e(a.title)}</h1>${a.description?'<p>'+e(a.description)+'</p>':''}
+    <p>${a.childId?childLabel(a.childId):e(t('familyAlbum'))} · ${e(countText(a.orderedArtworkIds.length))}</p>
+    <div class="buttons">${button('albumPick',t('addWorks'),'primary','plus')}
+      <details><summary class="secondary">${e(t('edit'))}</summary>
+        ${button('albumEdit',t('albumSettings'))}${button('albumDelete',t('delete'),'danger')}</details></div></header>
+    ${a.orderedArtworkIds.length?'<div class="art-grid masonry">'+a.orderedArtworkIds.map(id=>workCard(works.get(id))).join('')+'</div>':
+      '<p class="dashboard-empty">'+e(t('emptyBook'))+'</p>'}
+    <div class="panel"><label class="check"><input id="captions" type="checkbox" checked>${e(t('captions'))}</label>
+      ${button('albumPDF',t('pdf'),'secondary','download',a.orderedArtworkIds.length?'':'disabled')}</div></div>`;
+}
 function albumEditor(id,preselected=[]){
-  if(!state.children.length){profileEditor();return;}
-  const existing=state.albums.find(a=>a.id===id);let selected=[...(existing?.orderedArtworkIds||preselected)],child=existing?.childId||state.artworks.find(w=>w.id===preselected[0])?.childId||filters.child||state.children[0].id,dragId=null;
-  showModal(modalHeader(t(existing?'edit':'createAlbum'))+'<form id="album-form"><div class="modal-body"><div class="form-row"><label class="field">'+e(t('albumTitle'))+'<input required name="title" maxlength="300" placeholder="'+e(t('albumPlaceholder'))+'" value="'+e(existing?.title||'')+'"></label><label class="field">'+e(t('child'))+'<select name="child">'+state.children.map(c=>option(c.id,c.name,child)).join('')+'</select></label></div><fieldset class="pdf-style-picker"><legend>'+e(t('coverStyle'))+'</legend>'+['minimal','warm'].map(style=>'<label class="pdf-style '+style+'"><input type="radio" name="style" value="'+style+'" '+((existing?.coverStyle||'warm')===style?'checked':'')+'><span class="mini-page">Aa<span></span></span><strong>'+e(t(style))+'</strong></label>').join('')+'</fieldset><h3 style="font-size:14px">'+e(t('selectWorks'))+'</h3><div id="work-selection" class="selection-grid"></div><h3 style="font-size:14px">'+e(t('order'))+'</h3><p class="help">'+e(t('orderHint'))+'</p><div id="work-order"></div><div class="inline-error" role="alert"></div></div>'+footer()+'</form>',{action:async(action,el)=>{
-    const workId=el.dataset.id;
-    if(action==='select'){selected=selected.includes(workId)?selected.filter(x=>x!==workId):[...selected,workId];dirty=true;paint();}
-    if(action==='up'||action==='down'){const a=selected.indexOf(workId),b=a+(action==='up'?-1:1);if(b>=0&&b<selected.length){[selected[a],selected[b]]=[selected[b],selected[a]];dirty=true;paint();}}
-    if(action==='submit')modal.querySelector('form').requestSubmit();
-  }});
-  const form=modal.querySelector('form');form.oninput=()=>dirty=true;form.elements.child.onchange=()=>{child=form.elements.child.value;selected=selected.filter(id=>state.artworks.some(w=>w.id===id&&w.childId===child));dirty=true;paint();};
+  const existing=state.albums.find(a=>a.id===id),works=new Map(state.artworks.map(w=>[w.id,w]));
+  let selected=[...(existing?.orderedArtworkIds||preselected)],child=existing?.childId||'';
+  let cover=existing?.coverArtworkId||selected[0];
+  showModal(modalHeader(t(existing?'albumSettings':'createAlbum'))+`<form id="album-form"><div class="modal-body">
+    <label class="field">${e(t('albumTitle'))}<input required maxlength="300" name="title" value="${e(existing?.title)}"></label>
+    <label class="field">${e(t('description'))}<textarea maxlength="20000" name="description">${e(existing?.description)}</textarea></label>
+    <label class="field">${e(t('child'))}<select name="child">${option('',t('familyAlbum'),child)+state.children.map(c=>option(c.id,c.name,child)).join('')}</select></label>
+    <label class="field">${e(t('coverStyle'))}<select name="style">${['warm','minimal'].map(k=>option(k,t(k),existing?.coverStyle||'warm')).join('')}</select></label>
+    <label class="field">${e(t('cover'))}<select name="cover"></select></label>
+    <details class="order-editor"><summary class="secondary">${e(t('editOrder'))}</summary><div id="work-order"></div></details>
+    <div class="inline-error" role="alert"></div></div>${footer()}</form>`,{action:async(action,el)=>{
+      if(busy)return;
+      if(action==='submit'){form.requestSubmit();return;}
+      const i=selected.indexOf(el.dataset.id);if(i<0)return;
+      if(action==='unlink'){selected.splice(i,1);if(!selected.includes(cover))cover=selected[0];}
+      else if(action==='up'&&i>0)[selected[i],selected[i-1]]=[selected[i-1],selected[i]];
+      else if(action==='down'&&i<selected.length-1)[selected[i],selected[i+1]]=[selected[i+1],selected[i]];
+      else return;
+      dirty=true;paint();
+    }});
+  const form=modal.querySelector('form');form.oninput=()=>dirty=true;
   function paint(){
-    modal.querySelector('#work-selection').innerHTML=state.artworks.filter(w=>w.childId===child).map(w=>'<button type="button" class="select-work '+(selected.includes(w.id)?'selected':'')+'" data-action="select" data-id="'+w.id+'" aria-pressed="'+selected.includes(w.id)+'"><img data-path="'+e(coverPath(w))+'" alt=""><span>'+e(w.title||t('untitled'))+'</span>'+(selected.includes(w.id)?'<i>'+(selected.indexOf(w.id)+1)+'</i>':'')+'</button>').join('')||'<p class="help">'+e(t('noWorks'))+'</p>';
-    const order=modal.querySelector('#work-order');order.innerHTML=selected.map((id,i)=>{const w=state.artworks.find(w=>w.id===id);return '<div class="order-item" draggable="true" data-id="'+id+'"><span style="flex:0">'+(i+1)+'</span><img data-path="'+e(coverPath(w))+'" alt=""><span>'+e(w.title||t('untitled'))+'</span>'+button('up','','icon-button','up','type="button" data-id="'+id+'" aria-label="'+e(t('moveUp'))+'"')+button('down','','icon-button','down','type="button" data-id="'+id+'" aria-label="'+e(t('moveDown'))+'"')+'</div>';}).join('');
-    order.ondragstart=event=>{dragId=event.target.closest('.order-item')?.dataset.id;};order.ondragover=event=>event.preventDefault();order.ondrop=event=>{event.preventDefault();const target=event.target.closest('.order-item')?.dataset.id;if(dragId&&target&&dragId!==target){const from=selected.indexOf(dragId),to=selected.indexOf(target);selected.splice(from,1);selected.splice(to,0,dragId);dirty=true;paint();}};
-    hydrate(modal);
+    form.elements.cover.innerHTML=selected.map((id,i)=>option(id,(i+1)+'. '+(displayTitle(works.get(id))||t('untitled')),cover)).join('');
+    form.elements.cover.disabled=!selected.length;
+    form.querySelector('#work-order').innerHTML=selected.map((id,i)=>{
+      const attrs='data-id="'+e(id)+'" ';
+      return '<div class="order-item"><img data-path="'+e(coverPath(works.get(id)))+'" alt=""><span>'+e(displayTitle(works.get(id))||t('untitled'))+'</span>'+
+        [['up','moveUp',i===0],['down','moveDown',i===selected.length-1],['unlink','unlink',false]].map(([action,label,disabled])=>
+          button(action,'','icon-button',action==='unlink'?'close':action,attrs+'aria-label="'+e(t(label))+'" '+(disabled?'disabled':''))).join('')+'</div>';
+    }).join('');hydrate(modal);
   }
-  paint();
-  form.onsubmit=async event=>{event.preventDefault();if(busy)return;busy=true;try{
-    const next=structuredClone(state),data=new FormData(form),record={id:id||crypto.randomUUID(),childId:child,title:data.get('title').trim(),createdAt:existing?.createdAt||new Date().toISOString(),coverStyle:data.get('style'),orderedArtworkIds:selected};
-    if(!record.title)return;if(existing)next.albums[next.albums.findIndex(a=>a.id===id)]=record;else next.albums.push(record);
-    await persist(next);busy=false;closeModal(true);page='albums';render();toast(t('saved'));
-  }catch{inlineError(t('saveError'));}finally{busy=false;}};
+  form.elements.cover.onchange=()=>{cover=form.elements.cover.value;};
+  form.elements.child.onchange=()=>{
+    const next=form.elements.child.value;
+    const eligible=selected.filter(id=>!next||works.get(id).childId===next);
+    if(eligible.length!==selected.length&&!confirm(t('changeAlbumChild'))){form.elements.child.value=child;return;}
+    child=next;selected=eligible;if(!selected.includes(cover))cover=selected[0];paint();
+  };
+  paint();form.onsubmit=async event=>{
+    event.preventDefault();if(busy)return;
+    const title=form.elements.title.value.trim();if(!title){inlineError(t('saveInvalid'));return;}
+    busy=true;try{
+      const next=structuredClone(state),record={...existing,id:id||crypto.randomUUID(),title,description:form.elements.description.value.trim(),
+        childId:child||null,createdAt:existing?.createdAt||new Date().toISOString(),coverStyle:form.elements.style.value,
+        orderedArtworkIds:selected,coverArtworkId:cover||null};
+      if(existing)next.albums[next.albums.findIndex(a=>a.id===id)]=record;else next.albums.push(record);
+      await persist(next);closeModal(true);albumDetail(record.id);toast(t('saved'));
+    }catch{inlineError(t('saveError'));}finally{busy=false;}
+  };
 }
-function addToAlbum(workId){
-  const w=state.artworks.find(w=>w.id===workId),albums=state.albums.filter(a=>a.childId===w.childId);
-  showModal(modalHeader(t('addToAlbumTitle'))+'<div class="modal-body">'+(albums.length?albums.map(a=>button('chooseAlbum',a.title,'secondary','','data-id="'+a.id+'" style="width:100%;margin-bottom:10px"')).join(''):'<p class="help">'+e(t('noAlbum'))+'</p>')+button('newAlbum',t('createAlbum'),'primary','plus')+'</div>',{narrow:true,action:async(action,el)=>{
-    if(action==='newAlbum')albumEditor(null,[workId]);
-    if(action==='chooseAlbum'){const next=structuredClone(state),a=next.albums.find(a=>a.id===el.dataset.id);if(!a.orderedArtworkIds.includes(workId))a.orderedArtworkIds.push(workId);await persist(next);closeModal(true);render();toast(t('saved'));}
-  }});
+async function linkWorks(id,ids){
+  if(busy)return;
+  busy=true;try{
+    const next=structuredClone(state),i=next.albums.findIndex(a=>a.id===id),album=next.albums[i];
+    next.albums[i]=albumMembers(album,[...album.orderedArtworkIds,...ids]);
+    await persist(next);closeModal(true);render();toast(t('saved'));
+  }catch{inlineError(t('saveError'));}finally{busy=false;}
 }
-function albumDetail(id){
-  const a=state.albums.find(a=>a.id===id);
-  showModal(modalHeader(a.title)+'<div class="modal-body"><p class="help">'+childLabel(a.childId)+' · '+e(countText(a.orderedArtworkIds.length))+'</p><div class="selection-grid">'+a.orderedArtworkIds.map(id=>{const w=state.artworks.find(w=>w.id===id);return '<div class="select-work"><img data-path="'+e(coverPath(w))+'" alt=""><span>'+e(w.title||t('untitled'))+'</span></div>';}).join('')+'</div><label class="check"><input id="captions" type="checkbox" checked>'+e(t('captions'))+'</label><p class="help">'+e(t('pdfNote'))+'</p></div><div class="modal-footer">'+button('delete',t('delete'),'danger')+button('edit',t('edit'))+button('pdf',t('pdf'),'primary','download',a.orderedArtworkIds.length?'':'disabled')+'</div>',{action:async action=>{
-    if(action==='edit')albumEditor(id);
-    if(action==='delete'&&confirm(t('albumDelete'))){const next=structuredClone(state);next.albums=next.albums.filter(x=>x.id!==id);await persist(next);closeModal(true);render();}
-    if(action==='pdf')exportPDF(a,modal.querySelector('#captions').checked);
-  }});hydrate(modal);
+function addToAlbum(workIds){
+  const ids=Array.isArray(workIds)?workIds:[workIds],chosen=new Set(ids);
+  const children=new Set(state.artworks.filter(w=>chosen.has(w.id)).map(w=>w.childId));
+  const albums=state.albums.filter(a=>!a.childId||(children.size===1&&children.has(a.childId)));
+  showModal(modalHeader(t('addToAlbumTitle'))+'<div class="modal-body">'+albums.map(a=>
+    button('chooseAlbum',a.title,'secondary','','data-id="'+e(a.id)+'" '+(ids.every(id=>a.orderedArtworkIds.includes(id))?'disabled':''))).join('')+
+    button('newAlbum',t('createAlbum'),'primary','plus')+'</div>',{narrow:true,action:async(action,el)=>{
+      if(action==='chooseAlbum')await linkWorks(el.dataset.id,ids);
+      if(action==='newAlbum')albumEditor(null,ids);
+    }});
 }
+function pickWorks(album=null){
+  const selected=new Set(),included=new Set(album?.orderedArtworkIds||[]);
+  showModal(modalHeader(t('selectWorks'))+`<div class="modal-body">
+    <label class="field">${e(t('search'))}<input id="pick-search" type="search"></label>
+    <label class="field">${e(t('child'))}<select id="pick-child" ${album?.childId?'disabled':''}>
+    ${option('',t('familyFilter'),album?.childId||'')+state.children.map(c=>option(c.id,c.name,album?.childId||'')).join('')}</select></label>
+    <div id="pick-grid"></div><div class="inline-error" role="alert"></div></div>
+    <footer class="modal-footer"><span id="pick-count" aria-live="polite"></span>${button('confirmPick',t('addAlbum'),'primary')}</footer>`,
+    {wide:true,action:async(action,el)=>{
+      if(busy)return;
+      if(action==='pick'){
+        const id=el.dataset.id;if(included.has(id))return;
+        if(selected.has(id))selected.delete(id);else selected.add(id);
+        dirty=selected.size>0;el.setAttribute('aria-pressed',String(selected.has(id)));updateCount();
+      }
+      if(action==='confirmPick'&&selected.size){
+        if(album)await linkWorks(album.id,[...selected]);else addToAlbum([...selected]);
+      }
+    }});
+  const search=modal.querySelector('#pick-search'),child=modal.querySelector('#pick-child');
+  function updateCount(){modal.querySelector('#pick-count').textContent=t('selectedWorks')+' · '+selected.size;
+    modal.querySelector('[data-action=confirmPick]').disabled=!selected.size;}
+  function paint(){
+    const works=filterWorks(state,{search:search.value,child:child.value});
+    modal.querySelector('#pick-grid').innerHTML=works.length?'<div class="art-grid masonry">'+works.map(w=>workCard(w,'pick',selected.has(w.id)||included.has(w.id),included.has(w.id))).join('')+'</div>':e(t('noMatches'));
+    updateCount();hydrate(modal);
+  }
+  search.oninput=paint;child.onchange=paint;paint();
+}
+
 function progress(title){showModal(modalHeader(title)+'<div class="loading-box"><div class="spinner"></div><p id="progress">'+e(t('working'))+'</p></div>');busy=true;}
 async function exportPDF(album,captions){
   progress(t('pdfBuilding'));
@@ -509,11 +655,11 @@ app.onclick=async event=>{
   try{
     if(busy)return;
     const action=el.dataset.action;
-    if(action==='nav'&&page!==el.dataset.page){rememberRoute();page=el.dataset.page;render();window.scrollTo(0,0);pushRoute();}
+    if(action==='nav'&&(section||page!==el.dataset.page)){rememberRoute();section=null;page=el.dataset.page;render();window.scrollTo(0,0);pushRoute();}
     if(action==='openArchive')openArchive();
     if(action==='openPeriod'){rememberRoute();openArchive(el.dataset.period,el.dataset.id);pushRoute();}
     if(action==='language'){setLanguage(el.dataset.language);render();}
-    if(action==='filterChild'){filters.child=el.dataset.id;page='archive';render();}
+    if(action==='filterChild'){filters.child=el.dataset.id;page='archive';section=null;render();}
     if(action==='all'||action==='favorites'){filters.favorite=action==='favorites';render();}
     if(action==='category'){filters.category=el.dataset.category;render();}
     if(action==='clear')openArchive();
@@ -524,7 +670,17 @@ app.onclick=async event=>{
       finally{busy=false;}
     }
     if(action==='newChild'){if(demonstration)await enterOwn();else profileEditor();}
-    if(action==='editChild')profileEditor(el.dataset.id);
+    if(action==='childPage')childPage(el.dataset.id);
+    if(action==='editProfile')profileEditor(section.id);
+    if(action==='childWorks'){rememberRoute();openArchive('',section.id);pushRoute();}
+    if(action==='albumEdit')albumEditor(section.id);
+    if(action==='albumPick')pickWorks(state.albums.find(a=>a.id===section.id));
+    if(action==='albumPDF')await exportPDF(state.albums.find(a=>a.id===section.id),app.querySelector('#captions').checked);
+    if(action==='albumDelete'&&confirm(t('albumDelete'))){
+      busy=true;try{const next=structuredClone(state);next.albums=next.albums.filter(a=>a.id!==section.id);
+        await persist(next);section=null;render();}finally{busy=false;}
+    }
+    if(action==='pickForAlbum')pickWorks();
     if(action==='newWork')await artworkEditor();
     if(action==='drafts')await showDrafts();
     if(action==='detail')await artworkDetail(el.dataset.id);

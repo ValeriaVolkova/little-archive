@@ -28,7 +28,7 @@ for(const name of allowedFiles){
   hash.update(name).update('\0').update(createHash('sha256').update(content).digest());
 }
 const release=hash.digest('hex').slice(0,16);
-files.set('app.js',Buffer.from(replaceOnce(files.get('app.js').toString('utf8'),/const buildVersion='3A.1-local';/,"const buildVersion='3A.1 · "+release+"';")));
+files.set('app.js',Buffer.from(replaceOnce(files.get('app.js').toString('utf8'),/const buildVersion='3B-local';/,"const buildVersion='3B · "+release+"';")));
 const site=new URL('https://example.github.io/project-review/');
 function checkPath(ref,from){
   assert(ref.startsWith('./')||ref.startsWith('../'),`Non-relative URL in ${from}: ${ref}`);

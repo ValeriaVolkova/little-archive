@@ -30,9 +30,9 @@ export function arrange(ratios,width,columns,gap){
   return {positions,columnWidth,height:Math.max(0,...heights)-gap};
 }
 
-let resize;
-export function layoutGallery(grid){
-  resize?.disconnect();
+const observers=new WeakMap();
+export function layoutGallery(grid,root=document){
+  observers.get(root)?.disconnect();
   if(!grid)return;
   const cards=[...grid.children],ratios=cards.map(el=>Number(el.dataset.ratio));
   let lastWidth=0;
@@ -49,5 +49,5 @@ export function layoutGallery(grid){
     });
   }
   layout();
-  resize=new ResizeObserver(layout);resize.observe(grid);
+  const resize=new ResizeObserver(layout);resize.observe(grid);observers.set(root,resize);
 }

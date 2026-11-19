@@ -45,8 +45,21 @@ export function filterWorks(state,{child='',favorite=false,year='',category='',p
     return b.artworkDate.localeCompare(a.artworkDate)||b.addedAt.localeCompare(a.addedAt);
   });
 }
+export function albumMembers(album,ids){
+  const result={...album,orderedArtworkIds:[...new Set(ids)]};
+  if(result.coverArtworkId&&!result.orderedArtworkIds.includes(result.coverArtworkId))delete result.coverArtworkId;
+  return result;
+}
+export function profilePhoto(child){
+  const path=child.profileImagePath;
+  return typeof path==='string'&&path.startsWith('profiles/'+child.id+'/')&&/^profiles\/[a-zA-Z0-9-]+\/[a-zA-Z0-9-]+\.jpg$/.test(path)?path:null;
+}
+export function childAlbums(state,childId){
+  const works=new Set(state.artworks.filter(w=>w.childId===childId).map(w=>w.id));
+  return state.albums.filter(a=>a.childId===childId||(a.childId===null&&a.orderedArtworkIds.some(id=>works.has(id))));
+}
 export function deleteWork(state,id){
-  return {...state,artworks:state.artworks.filter(w=>w.id!==id),images:state.images.filter(i=>i.artworkId!==id),albums:state.albums.map(a=>({...a,orderedArtworkIds:a.orderedArtworkIds.filter(x=>x!==id)}))};
+  return {...state,artworks:state.artworks.filter(w=>w.id!==id),images:state.images.filter(i=>i.artworkId!==id),albums:state.albums.map(a=>albumMembers(a,a.orderedArtworkIds.filter(x=>x!==id)))};
 }
 export function validateArchive(s,{allowInvalidDates=false}={}){
   if(!s||s.version!==1)throw Error('Unsupported archive version');
@@ -72,7 +85,7 @@ export function validateArchive(s,{allowInvalidDates=false}={}){
     }
   }
   for(const a of s.albums){
-    if(!text(a.title,300)||!a.title.trim()||!s.children.some(c=>c.id===a.childId)||!['minimal','warm'].includes(a.coverStyle)||!Array.isArray(a.orderedArtworkIds)||new Set(a.orderedArtworkIds).size!==a.orderedArtworkIds.length||a.orderedArtworkIds.some(id=>!s.artworks.some(w=>w.id===id&&w.childId===a.childId)))throw Error('Invalid album');
+    if(!text(a.title,300)||!a.title.trim()||(a.childId!==null&&!s.children.some(c=>c.id===a.childId))||(a.description!=null&&!text(a.description))||(a.coverArtworkId!=null&&!a.orderedArtworkIds?.includes(a.coverArtworkId))||!['minimal','warm'].includes(a.coverStyle)||!Array.isArray(a.orderedArtworkIds)||new Set(a.orderedArtworkIds).size!==a.orderedArtworkIds.length||a.orderedArtworkIds.some(id=>!s.artworks.some(w=>w.id===id&&(a.childId===null||w.childId===a.childId))))throw Error('Invalid album');
   }
   return s;
 }
@@ -84,7 +97,7 @@ export function mergeArchives(current,incoming){
   result.artworks.push(...incoming.artworks.filter(w=>newIds.has(w.id)));
   result.images.push(...incoming.images.filter(i=>newIds.has(i.artworkId)));
   for(const album of incoming.albums){
-    if(!result.albums.some(a=>a.id===album.id))result.albums.push({...album,orderedArtworkIds:album.orderedArtworkIds.filter(id=>result.artworks.some(w=>w.id===id&&w.childId===album.childId))});
+    if(!result.albums.some(a=>a.id===album.id))result.albums.push(albumMembers(album,album.orderedArtworkIds.filter(id=>result.artworks.some(w=>w.id===id&&(album.childId===null||w.childId===album.childId)))));
   }
   return validateArchive(result,{allowInvalidDates:true});
 }

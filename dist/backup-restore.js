@@ -1,4 +1,4 @@
-import {mergeArchives,validateArchive} from './domain.js';
+import {mergeArchives,validateArchive,profilePhoto} from './domain.js';
 import {loadImage,raster} from './media.js';
 import {readZip,writeZip} from './zip.js';
 
@@ -7,6 +7,10 @@ export async function createBackup(state,getFile,onProgress){
   delete snapshot.revision;
   const manifest={format:'little-archive',formatVersion:1,exportedAt:new Date().toISOString(),archive:snapshot};
   const files=[['manifest.json',new Blob([JSON.stringify(manifest)],{type:'application/json'})]];
+  for(const child of snapshot.children){
+    const path=profilePhoto(child);
+    if(path)files.push([path,await getFile(path)]);
+  }
   for(const image of snapshot.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
       files.push([path,await getFile(path)]);
@@ -23,6 +27,13 @@ export async function inspectBackup(file,onProgress=()=>{}){
   const manifest=JSON.parse(await manifestBlob.text());
   if(manifest.format!=='little-archive'||manifest.formatVersion!==1)throw Error('Unknown format');
   const incoming=validateArchive(manifest.archive,{allowInvalidDates:true}),verifiedFiles=new Map();
+  for(const child of incoming.children){
+    const path=profilePhoto(child);
+    if(path){
+      const image=new Blob([await zip.get(path)],{type:'image/jpeg'});
+      await loadImage(image);verifiedFiles.set(path,image);
+    }
+  }
   let done=0;
   for(const image of incoming.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
@@ -45,6 +56,12 @@ export function planRestore(current,incoming,verifiedFiles){
   const existing=new Map(current.images.map(image=>[image.id,image]));
   const incomingById=new Map(incoming.images.map(image=>[image.id,image]));
   const puts=[],missingOriginals=[];
+  for(const child of incoming.children){
+    const path=profilePhoto(child),old=current.children.find(c=>c.id===child.id);
+    if(!path)continue;
+    if(!old)puts.push([path,verifiedFiles.get(path)]);
+    else if(profilePhoto(old)===path)missingOriginals.push([path,verifiedFiles.get(path)]);
+  }
   for(const image of archive.images){
     const old=existing.get(image.id);
     if(!old){

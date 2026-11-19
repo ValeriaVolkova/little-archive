@@ -1,6 +1,13 @@
 export let lang=localStorage.getItem('little-archive-language')||(navigator.language.startsWith('ru')?'ru':'en');
 export const setLanguage=v=>{lang=v;localStorage.setItem('little-archive-language',v);document.documentElement.lang=v;};
 const words={
+allDrawings:['Все рисунки','All artwork'],description:['Описание','Description'],familyAlbum:['Семейный альбом','Family album'],
+addWorks:['Добавить работы','Add artwork'],albumSettings:['Редактировать альбом','Edit album'],emptyBook:['Добавьте первые работы в этот альбом.','Choose the first artworks for this album.'],
+editOrder:['Изменить порядок и состав','Reorder or remove artwork'],unlink:['Убрать из альбома','Remove from album'],selectedWorks:['Выбрано','Selected'],
+changeAlbumChild:['Убрать из альбома работы других детей? Они останутся в архиве.','Remove other children’s artwork from this album? It will stay in the archive.'],
+profilePhoto:['Фото профиля','Profile photo'],deleteProfile:['Удалить профиль','Delete profile'],
+profileInUse:['У профиля есть работы, личные альбомы или черновики. Профиль сохранён, чтобы защитить эти записи.','This profile has artwork, personal albums or drafts. It is kept to protect those records.'],
+confirmProfileDelete:['Удалить пустой профиль и его аватар?','Delete this empty profile and its avatar?'],
 appVersion:['Версия приложения','App version'],updateAvailable:['Доступна новая версия','A new version is available'],applyUpdate:['Обновить','Update'],
 updating:['Открываем новую версию…','Opening the new version…'],
 updateOtherWindows:['Сохраните работу и закройте другие окна Little Archive, затем нажмите «Обновить».','Save your work and close other Little Archive windows, then choose Update.'],

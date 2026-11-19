@@ -1,3 +1,4 @@
+import {checkAlbums} from './albums-browser.mjs';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
@@ -59,9 +60,12 @@ try{
     const blob=await readFile(archive.images[0].originalPath);
     return {archive,digest:[...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))],memory:document.querySelector('.daily-card').dataset.id};
   });
+  const albums=await checkAlbums(page,url,output,chromium);
+  await page.locator('.mobile-nav [data-page=home]').click();
   const before=await signature();
   await browser.close();browser=await open();page=await browser.newPage();await page.goto(url);
   await page.locator('.daily-card').waitFor();assert.deepEqual(await signature(),before);
+  assert.deepEqual(before.archive.albums.find(a=>a.id===albums.id).orderedArtworkIds,albums.order);
   await page.locator('.mobile-nav [data-page=archive]').click();
   await page.locator('.masonry img').first().evaluate(img=>img.decode());
   await page.screenshot({path:join(output,'Archive.png')});
