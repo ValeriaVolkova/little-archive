@@ -324,6 +324,7 @@ async function checkPhaseTwo(db,photo,expected){
   const pdf=await createPDF(restorePlan.archive,{...added.albums[0],childId:newWork.childId,orderedArtworkIds:[newWork.id]},
     path=>{assert(path===cropped.editedPath,'PDF used uncropped original');return restoredFiles.get(path);},true,()=>{});
   const parsed=await window.PDFLib.PDFDocument.load(await pdf.blob.arrayBuffer());
+  assert(parsed.getCreator()==='Drawkeeper'&&parsed.getAuthor()==='Drawkeeper','PDF branding did not update');
   assert(parsed.getPageCount()===2&&parsed.getTitle()==='Альбом','PDF export lost its cover or artwork page');
   passed.push('PDF export still produces a readable A4 book with a Cyrillic album title');
   await nav('settings');await click('[data-language=en]');await nav('archive');

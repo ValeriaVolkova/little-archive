@@ -7,7 +7,7 @@ import {draftQueue} from './draft-queue.js';
 import {emptyArchive,today,validDate,ageAt,albumMembers,profilePhoto,childAlbums,archiveFilters,dashboardData,filterWorks,deleteWork,validateArchive,categories,displayCategory,workCategory} from './domain.js';
 import {createBackup,inspectBackup,planRestore} from './backup-restore.js';
 import {readArchive,readFile,commit,clientId,readDrafts,saveDraft} from './db.js';
-import {t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
+import {appName,languages,localizeDocument,t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
 import {preparePhoto,raster,loadImage,download,photoDate,chooseArtworkDate} from './media.js';
 import {createPDF} from './pdf.js';
 import {decoration} from './ui.js';
@@ -149,11 +149,11 @@ function render(){
   stopAlbumDrag?.();stopAlbumDrag=null;
   imagesById=new Map(state.images.map(image=>[image.id,image]));
   if(filters.child&&!state.children.some(c=>c.id===filters.child))filters.child='';
-  document.documentElement.lang=lang;app.dataset.page=page;
-  app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/icon.svg" alt=""><div><strong>Little Archive</strong><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
+  localizeDocument();app.dataset.page=page;
+  app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/icon.svg" alt=""><div><strong>'+appName+'</strong><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
   '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="childPage" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
   button('newChild',t('addChild'),'child-filter add','plus')+'<div class="side-foot">'+icon('lock')+'<div>'+e(t('local'))+'<br>'+e(t('private'))+'</div></div></aside><main class="main">'+
-  '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">Little Archive</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+(page!=='home'?button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"'):'')+'</div></div>'+
+  '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">'+appName+'</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+(page!=='home'?button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"'):'')+'</div></div>'+
   '<section class="update-banner panel" hidden><span role="status"></span>'+button('applyUpdate',t('applyUpdate'),'secondary')+'</section>'+
   (section?.type==='album'?albumView(section.id):section?.type==='child'?childView(section.id):{home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
   hydrate();updates.show();
@@ -184,7 +184,7 @@ const motif=(name,className)=>`<svg class="playful-motif ${className}" viewBox="
 function dashboardView(){
   const child=state.children.find(c=>c.id===chapterChild)||state.children[0];
   const memory=memoryOfDay(),title=memory&&displayTitle(memory);
-  return `<div class="dashboard"><header class="welcome-paper"><h1>Little Archive</h1>
+  return `<div class="dashboard"><header class="welcome-paper"><h1>${appName}</h1><div class="brand-tagline">${e(t('tagline'))}</div>
     <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${motif('flower','welcome-bloom')}${motif('checker','welcome-checker')}
     ${button(child?'newWork':'newChild',t(child?'addDrawing':'addFirstChild'),'primary','plus')}
     ${child?'':button('demo',t('tryDemo'),'text-button','arrow')}</header>
@@ -282,7 +282,7 @@ function settingsView(){
         ${button('childPage',t('profile'),'text-button','','data-id="'+e(c.id)+'"')}</div>`).join('')}
       ${button('newChild',t('addChild'),'secondary','plus')}</section>
       <section class="panel"><h2>${icon('settings')}${e(t('language'))}</h2>
-        <div class="language-options">${language('ru','Русский')}${language('en','English')}</div></section>
+        <div class="language-options">${Object.entries(languages).map(([code,label])=>language(code,label)).join('')}</div></section>
       <section class="panel"><h2>${icon('download')}${e(t('backup'))}</h2>
         <div class="settings-actions">${button('export',t('exportBackup'),'secondary','download')}${button('import',t('importBackup'),'secondary','upload')}</div>
         <p class="warning">${e(t('backupWarning'))}</p></section>
@@ -524,7 +524,7 @@ async function artworkDetail(id,index=0){
       if(action==='delete'){showModal(modalHeader(t('deleteTitle'))+'<div class="modal-body"><p class="help">'+e(t('deleteHint'))+'</p></div><div class="modal-footer">'+button('close',t('cancel'))+button('confirmDelete',t('delete'),'danger')+'</div>',{narrow:true,action:async a=>{if(a!=='confirmDelete'||busy)return;busy=true;try{const paths=photos.flatMap(p=>[p.originalPath,p.originalPath+'.thumb',...(p.editedPath?[p.editedPath]:[])]);await persist(deleteWork(state,id),[],paths);busy=false;closeModal(true);render();toast(t('deleted'));}catch{inlineError(t('saveError'));}finally{busy=false;}}});}
       if(action==='addAlbum')addToAlbum(id);
       if(action==='share'){
-        const blob=await getFile(photo.editedPath||photo.originalPath),file=new File([blob],(work.title||'artwork').replace(/[\\/:*?"<>|]/g,'-')+'.'+(photo.editedPath||photo.originalPath).split('.').at(-1),{type:blob.type||'image/jpeg'});
+        const blob=await getFile(photo.editedPath||photo.originalPath),file=new File([blob],(work.title||t('untitled')).replace(/[\\/:*?"<>|]/g,'-')+'.'+(photo.editedPath||photo.originalPath).split('.').at(-1),{type:blob.type||'image/jpeg'});
         if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:work.title});}catch(error){if(error.name!=='AbortError')download(file,file.name);}}else download(file,file.name);
       }
     }});
@@ -692,7 +692,7 @@ async function exportBackup(){
   progress(t('exportBackup'));
   try{
     const zip=await createBackup(state,getFile,(n,total)=>modal.querySelector('#progress').textContent=n+' / '+total);
-    busy=false;closeModal(true);download(zip,'LittleArchive-'+today()+'.zip');toast(t('backupDone'));
+    busy=false;closeModal(true);download(zip,appName+'-'+today()+'.zip');toast(t('backupDone'));
   }catch{busy=false;inlineError(t('saveError'));}
 }
 async function importBackup(file){
@@ -723,7 +723,12 @@ app.onclick=async event=>{
     if(action==='nav'&&(section||page!==el.dataset.page)){rememberRoute();section=null;page=el.dataset.page;render();window.scrollTo(0,0);pushRoute();}
     if(action==='openArchive')openArchive();
     if(action==='openPeriod'){rememberRoute();openArchive(el.dataset.period,el.dataset.id);pushRoute();}
-    if(action==='language'){setLanguage(el.dataset.language);render();}
+    if(action==='language'){
+      const previous=lang;
+      setLanguage(el.dataset.language);
+      if(demonstration&&previous!==lang)localizeDemo(previous);
+      render();
+    }
     if(action==='filterChild'){filters.child=el.dataset.id;page='archive';section=null;render();}
     if(action==='all'||action==='favorites'){filters.favorite=action==='favorites';render();}
     if(action==='category'){filters.category=el.dataset.category;render();}
@@ -781,19 +786,31 @@ app.oninput=event=>{
 window.addEventListener('beforeunload',event=>{if(dirty||busy){event.preventDefault();event.returnValue='';}});
 if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel('little-archive');channel.onmessage=event=>{if(!demonstration&&event.data?.source!==clientId){stale=true;toast(t('syncNotice'));}};}
 
+const demoTitleKeys=['demoFlowers','demoRainbow','demoFish','demoHouse','demoSun','demoLeaf'];
+function localizeDemo(previous){
+  const samples=['flowers','rainbow','fish','house','sun','leaf'];
+  function update(record,field,key){
+    if(record?.[field]===t(key,previous))record[field]=t(key);
+  }
+  samples.forEach((sample,index)=>update(state.artworks.find(work=>work.id==='demo-'+sample),'title',demoTitleKeys[index]));
+  update(state.artworks.find(work=>work.id==='demo-flowers'),'notes','demoNote');
+  update(state.albums.find(album=>album.id==='demo-album'),'title','demoAlbum');
+}
 async function makeDemo(){
-  const childId='demo-aurora',names=lang==='ru'?['Цветы для мамы','После дождя','Рыбка мечты','Наш уютный дом','Солнечный день','Осенние сокровища']:['Flowers for mum','After the rain','A little dream fish','Home, sweet home','A sunny kind of day','Autumn treasures'];
+  const childId='demo-aurora';
   const samples=['flowers','rainbow','fish','house','sun','leaf'],dates=['2026-10-18','2026-10-12','2026-10-07','2026-09-24','2026-09-15','2026-09-08'];
-  const result=emptyArchive();result.children.push({id:childId,name:lang==='ru'?'Аврора':'Aurora',birthDate:'2023-02-14',color:'#879989',profileImagePath:null});
+  const result=emptyArchive();result.children.push({id:childId,name:'Aurora',birthDate:'2023-02-14',color:'#879989',profileImagePath:null});
   for(let i=0;i<samples.length;i++){
     const source=await (await fetch('./assets/'+samples[i]+'.svg')).blob(),converted=await raster(source,1200),id='demo-'+samples[i],path='images/'+id+'/original.jpg';
     demoFiles.set(path,converted.blob);demoFiles.set(path+'.thumb',(await raster(converted.blob,640)).blob);
-    result.artworks.push({id,childId,title:names[i],artworkDate:dates[i],addedAt:dates[i]+'T12:00:00Z',category:['painting','drawing','drawing','drawing','painting','collage'][i],notes:i===0?(lang==='ru'?'«Это тебе, мама. Чтобы цветы были всегда».':'“These are for you, mum. So the flowers stay forever.”'):'',isFavorite:i===0||i===2,coverImageId:id});
+    result.artworks.push({id,childId,title:t(demoTitleKeys[i]),artworkDate:dates[i],addedAt:dates[i]+'T12:00:00Z',category:['painting','drawing','drawing','drawing','painting','collage'][i],notes:i===0?t('demoNote'):'',isFavorite:i===0||i===2,coverImageId:id});
     result.images.push({id,artworkId:id,originalPath:path,editedPath:null,width:converted.width,height:converted.height,sortOrder:0});
   }
-  result.albums.push({id:'demo-album',childId,title:lang==='ru'?'Маленькие открытия':'Little discoveries',createdAt:'2026-10-20T12:00:00Z',coverStyle:'warm',orderedArtworkIds:result.artworks.slice(0,4).map(w=>w.id)});
+  result.albums.push({id:'demo-album',childId,title:t('demoAlbum'),createdAt:'2026-10-20T12:00:00Z',coverStyle:'warm',orderedArtworkIds:result.artworks.slice(0,4).map(w=>w.id)});
   return result;
 }
+localizeDocument();
+app.querySelector('.boot span').textContent=t('boot');
 try{realState=await readArchive();state=realState;render();if(await refreshDrafts()&&drafts.length)render();}
 catch{app.innerHTML='<div class="empty">'+icon('lock')+'<h2>'+e(t('error'))+'</h2><p>'+e(t('storageError'))+'</p></div>';}
 if('serviceWorker' in navigator)updates.start(navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}));

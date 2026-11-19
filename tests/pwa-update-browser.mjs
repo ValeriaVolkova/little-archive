@@ -39,7 +39,7 @@ async function launch(){
 const snapshot=page=>page.evaluate(async()=>{
   const {readArchive,readFile}=await import('./db.js'),archive=await readArchive();
   const bytes=await Promise.all(archive.images.map(async image=>[...new Uint8Array(await (await readFile(image.originalPath)).arrayBuffer())]));
-  return {archive,bytes,marker:localStorage.getItem('test-marker')};
+  return {archive,bytes,language:localStorage.getItem('little-archive-language'),marker:localStorage.getItem('test-marker')};
 });
 let cdp;
 try{
@@ -76,7 +76,10 @@ try{
   for(const work of originalWorks)await app.locator('[data-action=pick][data-id="'+work.id+'"]').click();
   await app.locator('[data-action=confirmPick]').click();
   await app.locator('.album-gallery .work-open').last().waitFor();
+  await app.locator('.mobile-nav [data-page=settings]').click();
+  await app.locator('[data-language=en]').click();
   await app.evaluate(()=>localStorage.setItem('test-marker','keep'));
+  const oldManifest=await app.evaluate(async()=> (await fetch('./manifest.webmanifest')).json());
   const before=await snapshot(app);assert.equal(before.archive.artworks.length,2);
   assert.equal(before.archive.albums[0].coverTemplate,'lavender');
   assert.deepEqual(before.archive.albums[0].orderedArtworkIds,originalWorks.map(work=>work.id));
@@ -103,6 +106,12 @@ try{
   await app.locator('.mobile-nav [data-page=settings]').click();
   const first=await app.locator('[data-build]').innerText();
   assert.deepEqual(await snapshot(app),before);
+  assert.match(await app.title(),/^Drawkeeper · Little art\. Big memories\.$/);
+  assert.match(await app.locator('.mobile-brand').innerText(),/Drawkeeper/);
+  const manifest=await app.evaluate(async()=> (await fetch('./manifest.webmanifest')).json());
+  assert.equal(manifest.name,'Drawkeeper');assert.equal(manifest.short_name,'Drawkeeper');
+  for(const key of ['start_url','scope','id','display','icons'])assert.deepEqual(manifest[key],oldManifest[key]);
+  assert.equal(await app.locator('meta[name="apple-mobile-web-app-title"]').getAttribute('content'),'Drawkeeper');
   const restoreBrowser=await chromium.launch({executablePath:process.env.BROWSER_PATH,headless:true});
   try{
     const clean=await restoreBrowser.newPage();await clean.goto(url);
@@ -156,7 +165,7 @@ try{
   assert.equal(saved.archive.artworks.length,3);assert.deepEqual(saved.bytes.slice(0,2),before.bytes);
   const other=await browser.newPage();await other.goto(url);await other.locator('.dashboard').waitFor();
   await app.locator('[data-action=applyUpdate]').click();
-  await app.locator('.update-banner').filter({hasText:'other Little Archive windows'}).waitFor();
+  await app.locator('.update-banner').filter({hasText:'other Drawkeeper windows'}).waitFor();
   await other.close();
   await app.locator('[data-action=applyUpdate]').click();
   await app.locator('.dashboard').waitFor();
@@ -165,10 +174,34 @@ try{
   assert.doesNotMatch(first,/aaaaaaaaaaaaaaaa/);
   assert.deepEqual(await snapshot(app),saved);
   console.log('PASS: failed download leaves old version usable; prompt, editor and other-window guards, explicit update and correct build');
+  const navigation=async(tab,expected)=>{
+    await app.locator('.mobile-nav [data-page='+tab+']').click();
+    if(expected)await app.getByRole('heading',{name:expected,exact:true}).waitFor();
+    assert.equal(await app.locator('.mobile-brand').innerText(),'Drawkeeper');
+  };
+  await app.locator('[data-language=ru]').click();
+  assert.equal(await app.title(),'Drawkeeper · Маленькие рисунки. Большие воспоминания.');
+  await navigation('archive','Архив');
+  await navigation('settings','Настройки');
+  await app.locator('[data-language=es]').click();
+  assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
+  await navigation('home','Drawkeeper');
+  assert.equal(await app.locator('.brand-tagline').innerText(),'Pequeños dibujos. Grandes recuerdos.');
+  await navigation('archive','Archivo');
+  assert.equal(await app.locator('#archive-count').innerText(),'3 obras');
+  await navigation('albums','Álbumes');
+  await app.locator('.book-card').first().click();
+  await app.getByRole('heading',{name:'Ёлка и Archive',exact:true}).waitFor();
+  await app.getByRole('button',{name:'Añadir obras',exact:true}).waitFor();
+  await navigation('settings','Ajustes');
+  await app.getByRole('button',{name:'Restaurar desde ZIP',exact:true}).waitFor();
+  assert.equal(await app.evaluate(()=>document.documentElement.lang),'es');
+  const spanishArchive={...saved,language:'es'};
+  assert.deepEqual(await snapshot(app),spanishArchive);
   await browser.close();browser=await open();
   const blank=await browser.newPage();cdp=await browser.newCDPSession(blank);
   app=await launch();await app.locator('.daily-card').waitFor();
-  assert.deepEqual(await snapshot(app),saved);
+  assert.deepEqual(await snapshot(app),spanishArchive);
   assert.equal(await app.evaluate(async()=>(await (await import('./db.js')).readDrafts()).items[0].work.title),'Unfinished');
   await app.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));
   await browser.setOffline(true);
@@ -180,9 +213,10 @@ try{
     return loaded.every(faces=>faces.length&&faces.every(face=>face.status==='loaded'))&&
       getComputedStyle(document.querySelector('.welcome-paper h1')).fontFamily.includes('Balsamiq Sans');
   }));
+  assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
   await app.locator('.mobile-nav [data-page=albums]').click();
   assert.ok(await app.evaluate(async()=> (await fetch('./assets/playful-motifs.svg')).ok));
   assert.match(await app.locator('.book-jacket').first().getAttribute('class'),/jacket-lavender/);
   console.log('PASS: installed PWA restarts offline with Balsamiq Sans, Nunito, artwork and cover motifs');
-  console.log('PASS: installed app after browser restart preserves child, three artworks, exact originals, draft and localStorage marker');
+  console.log('PASS: installed app after browser restart preserves child, three artworks, exact originals, draft and localStorage marker, and Spanish language choice');
 }finally{await browser?.close();server.close();}

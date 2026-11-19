@@ -1,5 +1,5 @@
 import {loadImage} from './media.js';
-import {t,dateText} from './i18n.js';
+import {appName,t,dateText} from './i18n.js';
 function textLines(ctx,text,x,y,width,lineHeight,maxLines=4){
   const words=text.split(/\s+/);let line='',lines=[];
   for(const word of words){const next=(line?line+' ':'')+word;if(ctx.measureText(next).width>width&&line){lines.push(line);line=word;}else line=next;}
@@ -8,7 +8,7 @@ function textLines(ctx,text,x,y,width,lineHeight,maxLines=4){
 }
 export async function createPDF(archive,album,getFile,showCaptions,onProgress){
   const {PDFDocument}=window.PDFLib,doc=await PDFDocument.create();
-  doc.setTitle(album.title);doc.setCreator('Little Archive');doc.setAuthor('Little Archive');
+  doc.setTitle(album.title);doc.setCreator(appName);doc.setAuthor(appName);
   const works=album.orderedArtworkIds.map(id=>archive.artworks.find(w=>w.id===id)).filter(Boolean);
   const previews=[];let lowResolution=0;
   for(let pageIndex=0;pageIndex<=works.length;pageIndex++){
@@ -17,7 +17,7 @@ export async function createPDF(archive,album,getFile,showCaptions,onProgress){
     ctx.fillStyle='#302F2B';
     if(pageIndex===0){
       ctx.strokeStyle='#D9B6A7';ctx.lineWidth=3;ctx.strokeRect(100,100,1454,2139);
-      ctx.textAlign='center';ctx.font='26px sans-serif';ctx.fillStyle='#657767';ctx.fillText('LITTLE ARCHIVE',827,320);
+      ctx.textAlign='center';ctx.font='26px sans-serif';ctx.fillStyle='#657767';ctx.fillText(appName,827,320);
       ctx.fillStyle='#302F2B';ctx.font='600 90px sans-serif';textLines(ctx,album.title,827,970,1280,120,6);
       ctx.font='36px sans-serif';ctx.fillStyle='#65645D';ctx.fillText(archive.children.find(c=>c.id===album.childId)?.name||'',827,1880);
       if(works.length){const years=works.map(w=>w.artworkDate.slice(0,4)).sort();ctx.font='28px sans-serif';ctx.fillText(years[0]===years.at(-1)?years[0]:years[0]+' — '+years.at(-1),827,1950);}

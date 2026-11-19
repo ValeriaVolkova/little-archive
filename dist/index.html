@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#FFF1E6">
-  <meta name="description" content="Little Archive — личная коллекция детского творчества. Фотографии хранятся на вашем устройстве.">
+  <meta name="description" content="Drawkeeper. Little art. Big memories. Save your family’s drawings on this device.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; font-src 'self'; object-src blob:; frame-src blob:; base-uri 'self'; form-action 'none'">
-  <title>Little Archive — детство в деталях</title>
+  <meta name="apple-mobile-web-app-title" content="Drawkeeper">
+  <title>Drawkeeper · Little art. Big memories.</title>
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./style.css">
@@ -15,9 +16,11 @@
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <div id="app"><div class="boot">Little Archive<span>Открываем вашу коллекцию…</span></div></div>
+  <div id="app"><div class="boot" role="status">Drawkeeper<span></span></div></div>
   <dialog id="modal"></dialog>
   <div id="toast" role="status" aria-live="polite"></div>
-  <noscript>Для локального архива необходимо включить JavaScript. Ваши фотографии не отправляются на сервер.</noscript>
+  <noscript><p lang="en">Enable JavaScript to open your archive.</p>
+    <p lang="es">Activa JavaScript para abrir tu archivo.</p>
+    <p lang="ru">Включите JavaScript, чтобы открыть архив.</p></noscript>
 </body>
 </html>
