@@ -129,7 +129,7 @@ const footer=(label=t('save'),action='submit')=>'<footer class="modal-footer">'+
 modal.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
 modal.addEventListener('click',event=>{const el=event.target.closest('[data-action]');if(!el)return;if(el.dataset.action==='close')closeModal();else if(modalAction)Promise.resolve(modalAction(el.dataset.action,el,event)).catch(()=>inlineError(t('saveError')));});
 
-const buildVersion='3B.1-local';
+const buildVersion='3C-local';
 let pendingActions=0;
 const updates=updateManager({
   safe:()=>!busy&&!dirty&&!pendingActions&&!document.querySelector('dialog[open],.album-gallery.reordering'),
@@ -178,11 +178,14 @@ function memoryOfDay(){
   return work;
 }
 function displayTitle(work){return /\.(jpe?g|png|heic|heif|webp)$/i.test(work.title.trim())?'':work.title.trim();}
+const coverMotifs={cream:'flower',peach:'waves',sage:'checker',sky:'cloud',
+  lavender:'waves',butter:'sun',terracotta:'eyes',paper:'rainbow'};
+const motif=(name,className)=>`<svg class="playful-motif ${className}" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><use href="./assets/playful-motifs.svg#${name}"/></svg>`;
 function dashboardView(){
   const child=state.children.find(c=>c.id===chapterChild)||state.children[0];
   const memory=memoryOfDay(),title=memory&&displayTitle(memory);
   return `<div class="dashboard"><header class="welcome-paper"><h1>Little Archive</h1>
-    <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${decoration('flower','welcome-flower')}
+    <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${motif('flower','welcome-bloom')}${motif('checker','welcome-checker')}
     ${button(child?'newWork':'newChild',t(child?'addDrawing':'addFirstChild'),'primary','plus')}
     ${child?'':button('demo',t('tryDemo'),'text-button','arrow')}</header>
     ${demoBanner()}${draftBanner()}
@@ -209,7 +212,6 @@ function scheduleMidnight(){
 scheduleMidnight();
 function draftBanner(){return drafts.length&&!demonstration?'<div class="draft-banner">'+button('drafts',t('resumeDraft')+' · '+drafts.length,'secondary','edit')+'</div>':'';}
 function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('spark')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
-function hero(title,subtitle,action,label){return '<section class="hero hero-'+page+'"><div class="hero-copy"><div class="eyebrow">'+e(t(page==='albums'?'albumEyebrow':'collection'))+'</div><h1>'+e(title)+'</h1><p>'+e(subtitle)+'</p></div>'+decoration(page==='albums'?'book':'flower','hero-decoration')+(action?button(action,label,'primary','plus'):'')+'</section>';}
 function archiveHero(){
   const profiles=[{id:'',name:t('familyFilter')},...state.children];
   return `<section class="archive-home"><div class="archive-home-heading"><h1>${decoration('flower','home-flower')}${e(t('archive'))}</h1></div>
@@ -249,24 +251,49 @@ function archiveView(){
   '<div class="collection-label"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong>'+ button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+'</div>'+
   (works.length?button('pickForAlbum',t('selectWorks'),'text-button'):'')+'<div id="archive-results">'+archiveResults(works)+'</div>';
 }
-function albumCover(album){
-  const work=state.artworks.find(w=>w.id===album.coverArtworkId);
+function albumCover(album,{caption=false,previewWork=false}={}){
+  const explicit=state.artworks.find(w=>w.id===album.coverArtworkId);
+  const work=explicit||(previewWork?state.artworks.find(w=>w.id===album.orderedArtworkIds[0]):null);
+  const photo=work&&imagesById.get(work.coverImageId);
   const template=coverTemplates.includes(album.coverTemplate)?album.coverTemplate:'cream';
   return `<div class="album-cover book-jacket jacket-${template}${work?' has-art':''}">
-    ${work?'<img class="book-photo" data-path="'+e(coverPath(work))+'" alt="">':''}
-    <h3>${e(album.title||t('albumPlaceholder'))}</h3></div>`;
+    ${motif(coverMotifs[template],'jacket-art')}
+    ${photo?`<img class="book-photo" width="${photo.width}" height="${photo.height}" data-path="${e(coverPath(work))}" alt="">`:''}
+    <div class="jacket-copy"><h3>${e(album.title||t('albumPlaceholder'))}</h3>
+      ${caption?'<span class="book-caption">'+e(countText(album.orderedArtworkIds.length))+'</span>':''}</div></div>`;
 }
 function albumCards(albums){
   return '<div class="album-grid">'+albums.map(a=>`<button class="book-card" data-action="album" data-id="${e(a.id)}">
-    ${albumCover(a)}<div class="book-caption"><span>${e(countText(a.orderedArtworkIds.length))}</span>${icon('chevron')}</div></button>`).join('')+'</div>';
+    ${albumCover(a,{caption:true,previewWork:true})}</button>`).join('')+'</div>';
 }
 function albumsView(){
-  return hero(t('albums'),t('albumSubtitle'),'newAlbum',t('createAlbum'))+demoBanner()+
-    (state.albums.length?albumCards(state.albums):'<div class="empty">'+decoration('book','empty-art')+'<h2>'+e(t('emptyAlbums'))+'</h2><p>'+e(t('emptyAlbumsHint'))+'</p></div>');
+  return `<header class="section-hero albums-intro">${motif('flower','section-motif')}<h1>${e(t('albums'))}</h1>${button('newAlbum',t('createAlbum'),'primary','plus')}</header>`+
+    demoBanner()+(state.albums.length?albumCards(state.albums):
+      '<div class="empty">'+motif('rainbow','empty-art')+'<h2>'+e(t('emptyAlbums'))+'</h2><p>'+e(t('emptyAlbumsHint'))+'</p></div>');
 }
-function settingsView(){return hero(t('settingsHeadline'),t('local'))+demoBanner()+'<div class="settings-grid"><section class="panel"><h2>'+icon('photo')+e(t('profiles'))+'</h2>'+state.children.map(c=>'<div class="profile-row"><span class="child-dot" style="background:'+e(c.color)+'40">'+e(c.name[0])+'</span><div>'+e(c.name)+(c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':'')+'</div>'+button('childPage',t('profile'),'text-button','','data-id="'+e(c.id)+'"')+'</div>').join('')+button('newChild',t('addChild'),'secondary','plus')+'</section>'+
-  '<section class="panel"><h2>'+icon('download')+e(t('backup'))+'</h2><p>'+e(t('backupHint'))+'</p><div class="buttons">'+button('export',t('exportBackup'),'secondary','download')+button('import',t('importBackup'),'secondary','upload')+'</div><p class="warning">'+e(t('backupWarning'))+'</p></section>'+
-  '<section class="panel"><h2>'+icon('lock')+e(t('privacyTitle'))+'</h2><p>'+e(t('privacyBody'))+'</p><p>'+e(t('appVersion'))+' · <code data-build>'+e(buildVersion)+'</code></p><p class="web-note">'+e(t('webNote'))+'</p></section><section class="panel"><h2>'+e(t('language'))+'</h2><div class="buttons">'+button('language','Русский',lang==='ru'?'primary':'secondary','','data-language="ru"')+button('language','English',lang==='en'?'primary':'secondary','','data-language="en"')+'</div></section></div>';}
+function settingsView(){
+  const language=(code,label)=>button('language',label,lang===code?'primary':'secondary','',
+    'data-language="'+code+'" aria-pressed="'+(lang===code)+'"');
+  return `<header class="section-hero settings-intro"><h1>${e(t('settings'))}</h1>${motif('flower','section-motif')}</header>
+    ${demoBanner()}<div class="settings-grid">
+      <section class="panel"><h2>${icon('photo')}${e(t('profiles'))}</h2>
+      ${state.children.map(c=>`<div class="profile-row">${avatar(c)}<div>${e(c.name)}
+        ${c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':''}</div>
+        ${button('childPage',t('profile'),'text-button','','data-id="'+e(c.id)+'"')}</div>`).join('')}
+      ${button('newChild',t('addChild'),'secondary','plus')}</section>
+      <section class="panel"><h2>${icon('settings')}${e(t('language'))}</h2>
+        <div class="language-options">${language('ru','Русский')}${language('en','English')}</div></section>
+      <section class="panel"><h2>${icon('download')}${e(t('backup'))}</h2>
+        <div class="settings-actions">${button('export',t('exportBackup'),'secondary','download')}${button('import',t('importBackup'),'secondary','upload')}</div>
+        <p class="warning">${e(t('backupWarning'))}</p></section>
+      <section class="panel"><h2>${icon('album')}${e(t('pdf'))}</h2>
+        ${button('nav',t('albums'),'secondary','chevron','data-page="albums"')}</section>
+      <section class="panel storage-info"><h2>${icon('lock')}${e(t('privacyTitle'))}</h2>
+        <p>${e(t('appVersion'))}<br><code data-build>${e(buildVersion)}</code></p>
+        <details><summary>${e(t('local'))}</summary><p>${e(t('privacyBody'))}</p><p class="web-note">${e(t('webNote'))}</p></details>
+      </section>
+    </div>`;
+}
 function openArchive(period='',child=''){clearTimeout(searchTimer);filters={...archiveFilters(),period,child};page='archive';section=null;render();window.scrollTo(0,0);}
 async function enterOwn(){demonstration=false;state=realState;page='home';filters=archiveFilters();clearURLs();render();if(!state.children.length)profileEditor();}
 
@@ -285,7 +312,7 @@ function childView(id){
   const child=state.children.find(c=>c.id===id);if(!child)return settingsView();
   const works=state.artworks.filter(w=>w.childId===id).sort((a,b)=>b.addedAt.localeCompare(a.addedAt));
   const albums=childAlbums(state,id);
-  return `<div class="dashboard child-story"><header class="welcome-paper">${avatar(child)}<h1>${e(child.name)}</h1>
+  return `<div class="dashboard child-story"><header class="welcome-paper">${motif('flower','profile-bloom')}${motif('sun','profile-sun')}${avatar(child)}<h1>${e(child.name)}</h1>
     <p>${[ageText(ageAt(child.birthDate,today())),countText(works.length)].filter(Boolean).map(e).join(' · ')}</p>
     <div class="buttons">${button('childWorks',t('allDrawings'),'primary','grid')}${button('editProfile',t('edit'),'secondary','edit')}</div></header>
     <section class="dashboard-section"><h2>${e(t('growingArt'))}</h2><div class="period-grid">${chapters(works,child).map(([period,n])=>
@@ -501,6 +528,7 @@ async function artworkDetail(id,index=0){
         if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:work.title});}catch(error){if(error.name!=='AbortError')download(file,file.name);}}else download(file,file.name);
       }
     }});
+  modal.classList.add('artwork-dialog');
   const img=modal.querySelector('#detail-image');
   try{img.src=temporaryURL((await raster(await getFile(photo.editedPath||photo.originalPath),2200)).blob);}catch{img.alt=t('imageError');}
   const zoom=()=>img.classList.toggle('zoomed');img.onclick=zoom;img.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();zoom();}};
@@ -572,7 +600,7 @@ function albumEditor(id,preselected=[]){
   }
   function paint(){
     const choices=form.querySelector('#cover-choices');
-    choices.innerHTML='<div class="cover-swatches">'+coverTemplates.map(key=>`<button type="button" class="cover-swatch" data-action="coverTemplate" data-template="${key}" aria-pressed="${!cover&&template===key}"><span class="jacket-${key}" aria-hidden="true"></span>${e(t('jacket'+key))}</button>`).join('')+'</div>'+
+    choices.innerHTML='<div class="cover-swatches">'+coverTemplates.map(key=>`<button type="button" class="cover-swatch" data-action="coverTemplate" data-template="${key}" aria-pressed="${!cover&&template===key}"><span class="jacket-${key}" aria-hidden="true">${motif(coverMotifs[key],'swatch-art')}</span>${e(t('jacket'+key))}</button>`).join('')+'</div>'+
       (selected.length?button('coverArt',t('childArtworkCover'),'secondary','','aria-expanded="'+showArt+'"'):'')+
       (showArt?'<div class="cover-artworks">'+selected.map(id=>{
         const work=state.artworks.find(w=>w.id===id);

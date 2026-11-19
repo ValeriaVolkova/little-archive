@@ -81,6 +81,8 @@ try{
     assert.ok(result.loaded>0&&result.loaded<32,JSON.stringify({fraction,...result}));assert.ok(!result.overflow&&result.order);
   }
   await page.locator('.masonry button').first().click();await page.locator('#detail-image').waitFor();
+  await page.locator('#detail-image').evaluate(image=>image.decode());
+  await page.screenshot({path:join(output,'Artwork.png'),animations:'disabled'});
   await page.goBack();await page.locator('#modal').waitFor({state:'hidden'});
   assert.equal(await page.locator('.masonry .work-card').count(),500);
   await page.locator('.archive-options summary').click();

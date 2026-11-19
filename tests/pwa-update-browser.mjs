@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_PATH||'playwright');
 const [old,current]=process.argv.slice(2).map(arg=>resolve(arg));
 let stage=0,failInstall=false;
-const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
+const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.ttf':'font/ttf','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
 const server=createServer(async(req,res)=>{
   if(req.url==='/harness'){res.writeHead(200,{'Content-Type':'text/html'}).end('<title>Local test</title>');return;}
   const path=new URL(req.url,'http://localhost').pathname.replace(/^\/little-archive\//,'')||'index.html';
@@ -16,7 +16,7 @@ const server=createServer(async(req,res)=>{
   try{
     let bytes=await readFile(join(stage?current:old,path));
     if(stage===2&&(path==='sw.js'||path==='app.js')){
-      const text=bytes.toString().replace(/(CACHE_PREFIX\+'|3B\.1 · )[a-f0-9]{16}/g,'$1aaaaaaaaaaaaaaaa');
+      const text=bytes.toString().replace(/(CACHE_PREFIX\+'|3C · )[a-f0-9]{16}/g,'$1aaaaaaaaaaaaaaaa');
       bytes=Buffer.from(text);
     }
     if(failInstall&&path==='scrapbook.js')return res.writeHead(503).end();
@@ -66,8 +66,20 @@ try{
     await app.locator('#artwork-form [data-action=submit]').click();
     await app.locator('#artwork-form').waitFor({state:'detached'});
   }
+  await app.locator('.mobile-nav [data-page=albums]').click();
+  await app.locator('[data-action=newAlbum]').click();
+  await app.locator('#album-form [name=title]').fill('Ёлка и Archive');
+  await app.locator('[data-template=lavender]').click();
+  await app.locator('#album-form [data-action=submit]').click();
+  await app.locator('[data-action=albumPick]').click();
+  const originalWorks=(await snapshot(app)).archive.artworks;
+  for(const work of originalWorks)await app.locator('[data-action=pick][data-id="'+work.id+'"]').click();
+  await app.locator('[data-action=confirmPick]').click();
+  await app.locator('.album-gallery .work-open').last().waitFor();
   await app.evaluate(()=>localStorage.setItem('test-marker','keep'));
   const before=await snapshot(app);assert.equal(before.archive.artworks.length,2);
+  assert.equal(before.archive.albums[0].coverTemplate,'lavender');
+  assert.deepEqual(before.archive.albums[0].orderedArtworkIds,originalWorks.map(work=>work.id));
   const oldZip=await app.evaluate(async()=>{
     const {createBackup}=await import('./backup-restore.js'),{readArchive,readFile}=await import('./db.js');
     return [...new Uint8Array(await (await createBackup(await readArchive(),readFile)).arrayBuffer())];
@@ -158,5 +170,19 @@ try{
   app=await launch();await app.locator('.daily-card').waitFor();
   assert.deepEqual(await snapshot(app),saved);
   assert.equal(await app.evaluate(async()=>(await (await import('./db.js')).readDrafts()).items[0].work.title),'Unfinished');
+  await app.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));
+  await browser.setOffline(true);
+  await app.reload();await app.locator('.daily-card').waitFor();
+  await app.waitForFunction(()=>document.querySelector('.daily-card img')?.naturalWidth>0);
+  assert.ok(await app.evaluate(async()=>{
+    const fonts=[['700 28px "Balsamiq Sans"','Ёж Й Ы Щ Archive'],['400 18px "Balsamiq Sans"','Ёлка Home'],['400 16px Nunito','Книга Art']];
+    const loaded=await Promise.all(fonts.map(([font,text])=>document.fonts.load(font,text)));
+    return loaded.every(faces=>faces.length&&faces.every(face=>face.status==='loaded'))&&
+      getComputedStyle(document.querySelector('.welcome-paper h1')).fontFamily.includes('Balsamiq Sans');
+  }));
+  await app.locator('.mobile-nav [data-page=albums]').click();
+  assert.ok(await app.evaluate(async()=> (await fetch('./assets/playful-motifs.svg')).ok));
+  assert.match(await app.locator('.book-jacket').first().getAttribute('class'),/jacket-lavender/);
+  console.log('PASS: installed PWA restarts offline with Balsamiq Sans, Nunito, artwork and cover motifs');
   console.log('PASS: installed app after browser restart preserves child, three artworks, exact originals, draft and localStorage marker');
 }finally{await browser?.close();server.close();}

@@ -1,6 +1,6 @@
-const CACHE='little-archive-shell-editorial-v22-album-ux';
+const CACHE='little-archive-shell-editorial-v23-playful';
 const FILES=['./','./index.html','./style.css','./app.js','./domain.js','./db.js','./i18n.js','./media.js','./pdf.js','./zip.js','./vendor/pdf-lib.min.js','./assets/icon.svg','./assets/flowers.svg','./assets/rainbow.svg','./assets/fish.svg','./assets/house.svg','./assets/sun.svg','./assets/leaf.svg'];
-FILES.push('./album-ux.js','./pwa-update.js','./vendor/heic-to.js','./crop-editor.js','./scrapbook.js','./backup-restore.js','./storage-error.js','./storage-codec.js','./draft-queue.js','./assets/background-doodles.svg','./editorial.css','./ui.js','./assets/fonts/Nunito.ttf','./manifest.webmanifest');
+FILES.push('./playful.css','./assets/playful-motifs.svg','./assets/fonts/BalsamiqSans-Regular.ttf','./assets/fonts/BalsamiqSans-Bold.ttf','./album-ux.js','./pwa-update.js','./vendor/heic-to.js','./crop-editor.js','./scrapbook.js','./backup-restore.js','./storage-error.js','./storage-codec.js','./draft-queue.js','./assets/background-doodles.svg','./editorial.css','./ui.js','./assets/fonts/Nunito.ttf','./manifest.webmanifest');
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(path=>new Request(new URL(path,self.registration.scope),{cache:'reload'}))))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('little-archive-shell-')&&k!==CACHE).map(k=>caches.delete(k))))));
 self.addEventListener('fetch',event=>{

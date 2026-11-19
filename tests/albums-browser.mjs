@@ -15,10 +15,11 @@ export async function checkAlbums(page,url,output,chromium){
     await page.locator('#toast.show').waitFor({state:'hidden'});
     await page.screenshot({path:join(output,name+'.png'),animations:'disabled'});
   }
-  async function create(title,child=''){
+  async function create(title,child='',template='cream'){
     await nav('albums');await click('newAlbum');
     await form.locator('[name=title]').fill(title);await form.locator('[name=child]').selectOption(child);
     await form.locator('[name=description]').fill('Рисунки, которые мы собирали вместе.');
+    await form.locator('[data-template='+template+']').click();
     await click('submit',form);await page.locator('.album-story').waitFor();
   }
   async function pick(ids){
@@ -97,8 +98,8 @@ export async function checkAlbums(page,url,output,chromium){
   await page.locator('.album-portrait img').evaluate(i=>i.decode());
   await page.evaluate(()=>window.scrollTo(0,0));await screen('Album');
   await click('albumPDF');await page.locator('#pdf-previews img').first().waitFor();await click('close',page.locator('#modal'));
-  await create('Лизина весна','one');await pick(['sample-1']);
-  await create('Мишины рисунки','two');await pick(['sample-0']);
+  await create('Лизина весна','one','peach');await pick(['sample-1']);
+  await create('Мишины рисунки','two','butter');await pick(['sample-0']);
   await nav('albums');
   assert.equal(await page.locator('.book-card').count(),3);
   await page.locator('.book-photo').first().evaluate(i=>i.decode());
@@ -147,7 +148,7 @@ export async function checkAlbums(page,url,output,chromium){
   await nav('settings');assert.equal(await page.locator('.top-actions [data-language]').count(),0);
   await page.locator('[data-language=en]').click();assert.equal(await page.locator('html').getAttribute('lang'),'en');
   await page.locator('[data-language=ru]').click();assert.equal(await page.locator('html').getAttribute('lang'),'ru');
-  await page.locator('[data-language=ru]').scrollIntoViewIfNeeded();await screen('Language');
+  await page.locator('[data-language=ru]').scrollIntoViewIfNeeded();await screen('Settings');
   await page.locator('.profile-row [data-id=one]').click();
   assert.equal(await page.locator('.child-story .book-card').count(),2);
   assert.equal(await page.locator('.child-story .memory-card').count(),3);
