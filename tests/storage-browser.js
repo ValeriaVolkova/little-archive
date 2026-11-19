@@ -178,13 +178,17 @@ async function checkPhaseTwo(db,photo,expected){
     input.dispatchEvent(new Event('input',{bubbles:true}));
     input.dispatchEvent(new Event('change',{bubbles:true}));
   };
-  await waitFor(()=>query('#chapter-child'));
-  assert(query('.welcome-paper [data-action=newWork]')&&query('.chapter-profile [data-action=childPage]'),'Home lost add or profile');
-  assert(doc().querySelectorAll('.dashboard-section').length===1&&!query('.dashboard [data-action=detail]'),'Home contains an extra artwork section');
-  value(query('#chapter-child'),'misha');
-  assert(query('.mobile-nav [aria-current=page]').dataset.page==='home','Initial tab was not Home');
-  assert(doc().documentElement.scrollWidth<=390,'Dashboard overflows a 390px viewport');
-  await click('[data-action=openPeriod][data-period="3"]');
+  await waitFor(()=>query('.archive-home'));
+  assert(query('.mobile-nav [aria-current=page]').dataset.page==='archive','Initial tab was not Archive');
+  equal([...doc().querySelectorAll('.mobile-nav button')].map(el=>el.dataset.page||el.dataset.action),
+    ['home','archive','newWork','albums','settings'],'Five-item navigation is out of order');
+  await nav('home');
+  assert(doc().querySelectorAll('.artist-card').length===2&&query('.collection-summary p').textContent==='2 работы','Home did not count real profiles and artwork');
+  await click('.artist-card[data-id=misha]');
+  assert(query('.child-tabs [data-id=misha]').getAttribute('aria-pressed')==='true','Artist did not open their Archive');
+  await nav('home');
+  assert(doc().documentElement.scrollWidth<=390,'Home overflows a 390px viewport');
+  await click('[data-action=openPeriod][data-id=misha][data-period="3"]');
   assert(query('#period-filter').value==='3','Dashboard did not apply age period');
   equal([...doc().querySelectorAll('.art-grid [data-action=detail]')].map(el=>el.dataset.id),['work-1'],'Age period returned the wrong works');
   await click('.child-tabs [data-id=aurora]');
@@ -195,7 +199,7 @@ async function checkPhaseTwo(db,photo,expected){
   assert(query('.child-tabs [data-id=""]').getAttribute('aria-pressed')==='true','Archive nav did not default to All children');
   assert(doc().querySelectorAll('.art-grid .work-card').length===2,'Family archive omitted a child');
   assert(doc().documentElement.scrollWidth<=390,'Archive overflows a 390px viewport');
-  passed.push('Home keeps add and profile, switches child chapters and retains combined Archive filters');
+  passed.push('Start on Archive; Home counts artwork and opens the correct child or age filter');
 
   await click('.art-grid [data-id=work-0][data-action=detail]');
   await click('#modal [data-action=edit]');
@@ -210,7 +214,7 @@ async function checkPhaseTwo(db,photo,expected){
   for(const path of originals.slice(0,2))equal(await bytes(await readFile(path)),expected,'Edit replaced an original');
   passed.push('Saving a metadata edit on a legacy work preserves both original files and references');
 
-  await click('.global-add');
+  await click('.mobile-nav .nav-add');
   const form=await waitFor(()=>query('#artwork-form'));
   assert(form.elements.child.value==='aurora','Last-used child was not remembered');
   value(form.elements.date,'2021-01-01');
@@ -394,16 +398,17 @@ async function checkPhaseTwo(db,photo,expected){
   await change(db,['metadata'],tx=>{const store=tx.objectStore('metadata');store.delete('archive');store.delete('draft:good');store.delete('draft:bad');});
   const first=appFrame();
   const firstQuery=s=>first.contentDocument?.querySelector(s);
-  (await waitFor(()=>firstQuery('.welcome-paper [data-action=newChild]'))).click();
+  (await waitFor(()=>firstQuery('.mobile-nav .nav-add'))).click();
   const profile=await waitFor(()=>firstQuery('#profile-form'));
   assert(profile.elements.name.required&&profile.elements.birthday.required,'First profile does not request a name and birthday');
   value(profile.elements.name,'Новый профиль');value(profile.elements.birthday,'2021-04-29');
   profile.querySelector('[data-action=submit]').click();
-  await waitFor(()=>firstQuery('.welcome-paper [data-action=newWork]'));
-  assert(firstQuery('#chapter-child')&&!firstQuery('.dashboard [data-action=detail]'),'Empty Home has unexpected artwork cards');
+  await waitFor(()=>firstQuery('#archive-results [data-action=newWork]'));
+  firstQuery('.mobile-nav [data-page=home]').click();
+  assert(firstQuery('.artist-card')&&!firstQuery('.age-chart,.story-pair'),'Empty Home has invented statistics or artwork');
   const firstState=await readArchive();
   assert(firstState.children.length===1&&firstState.artworks.length===0,'Onboarding mixed demo records into the archive');
-  passed.push('First opening offers a first profile and returns to a clean Dashboard after creation');
+  passed.push('First opening starts on Archive, central Add creates the first profile, and empty Home has no invented data');
   first.remove();
   const merge=planRestore(firstState,newBackup.incoming,newBackup.verifiedFiles);
   await commit(merge.archive,merge.puts,[],null,merge.missingOriginals);

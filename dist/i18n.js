@@ -13,6 +13,13 @@ export function setLanguage(value){
   try{localStorage.setItem(languageKey,value);}catch{/* Keep the choice for this session. */}
 }
 const words={
+myCollection:['Моя коллекция','My collection','Mi colección'],
+littleArtists:['Маленькие художники','Little artists','Pequeños artistas'],
+artByAge:['Творчество по возрастам','Art by age','Arte por edades'],
+atTheSameAge:['В одном возрасте','At the same age','A la misma edad'],
+firstAndLast:['Первый и последний рисунок','First and latest artwork','Primera y última obra'],
+firstDrawing:['Первый рисунок','First artwork','Primera obra'],
+latestDrawing:['Последний рисунок','Latest artwork','Última obra'],
 boot:["Открываем вашу коллекцию…", "Opening your collection…", "Abriendo tu colección…"],
 demoFlowers:["Цветы для мамы", "Flowers for mum", "Flores para mamá"],
 demoRainbow:["После дождя", "After the rain", "Después de la lluvia"],

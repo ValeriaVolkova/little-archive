@@ -96,7 +96,7 @@ async function run(){
   },'Phase 3A worker activation after closing old tabs');
 
   const updated=openFrame();
-  await waitFor(()=>query(updated,'#chapter-child'),'Family chapters after update');
+  await waitFor(()=>query(updated,'.archive-home'),'Archive after update');
   assert((await caches.keys()).length>0,'Missing app shell');
   const activeCache=(await caches.keys()).find(key=>key.startsWith('little-archive-pages-shell:'));
   assert(await (await caches.open(activeCache)).match(scope+'crop-editor.js'),'Crop editor absent from updated worker');

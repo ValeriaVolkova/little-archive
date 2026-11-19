@@ -23,7 +23,7 @@ let browser;
 try{
   browser=await open();
   let page=await browser.newPage();await page.goto(url);
-  await page.locator('.welcome-paper').waitFor();
+  await page.locator('.archive-home').waitFor();
   await page.evaluate(async()=>{
     const {commit}=await import('/db.js'),{emptyArchive}=await import('/domain.js');
     const state=emptyArchive(),puts=[];
@@ -47,22 +47,15 @@ try{
     }
     await commit(state,puts);
   });
-  await page.reload();await page.locator('#chapter-child').waitFor();
-  assert.equal(await page.locator('.dashboard [data-action=detail]').count(),0);
-  const gap=await page.locator('.welcome-paper + .dashboard-section').evaluate(el=>
-    el.getBoundingClientRect().top-el.previousElementSibling.getBoundingClientRect().bottom);
-  assert.ok(gap>=0&&gap<=24,'Unexpected gap between banner and chapters: '+gap);
-  await page.locator('.home-links [data-page=albums]').click();
-  await page.locator('.albums-intro').waitFor();
+  await page.reload();await page.locator('.archive-home').waitFor();
   await page.locator('.mobile-nav [data-page=home]').click();
-  await page.locator('.home-links [data-page=archive]').click();
-  await page.locator('.archive-home').waitFor();
-  await page.locator('.mobile-nav [data-page=home]').click();
+  assert.equal(await page.locator('.collection-summary p').textContent(),'500 работ');
+  assert.equal(await page.locator('.artist-card').count(),2);
+  assert.equal(await page.locator('.story-photo').count(),4);
   await page.evaluate(()=>document.fonts.ready);
   await page.screenshot({path:join(output,'Home.png')});
-  await page.locator('#chapter-child').scrollIntoViewIfNeeded();
-  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
-  await page.screenshot({path:join(output,'Chapters.png')});
+  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));
+  await page.screenshot({path:join(output,'Comparisons.png')});
   const signature=()=>page.evaluate(async()=>{
     const {readArchive,readFile}=await import('/db.js');const archive=await readArchive();
     const blob=await readFile(archive.images[0].originalPath);
@@ -72,7 +65,7 @@ try{
   await page.locator('.mobile-nav [data-page=home]').click();
   const before=await signature();
   await browser.close();browser=await open();page=await browser.newPage();await page.goto(url);
-  await page.locator('#chapter-child').waitFor();assert.deepEqual(await signature(),before);
+  await page.locator('.archive-home').waitFor();assert.deepEqual(await signature(),before);
   await page.locator('.mobile-nav [data-page=settings]').click();
   await page.evaluate(()=>{
     document.documentElement.style.setProperty('--top-inset','47px');
@@ -83,15 +76,16 @@ try{
     assert.equal(await page.locator('.settings-intro h1').textContent(),title);
     const layout=await page.evaluate(()=>{
       const rect=selector=>document.querySelector(selector).getBoundingClientRect();
-      const nav=rect('.mobile-nav'),topbar=rect('.topbar'),main=getComputedStyle(document.querySelector('.main'));
+      const nav=rect('.mobile-nav'),add=rect('.nav-add'),topbar=rect('.topbar'),main=getComputedStyle(document.querySelector('.main'));
       return {
         top:topbar.top,bottom:innerHeight-nav.bottom,padding:parseFloat(main.paddingBottom),navHeight:nav.height,
         overflow:document.documentElement.scrollWidth>innerWidth,
+        centered:Math.abs(add.left+add.width/2-innerWidth/2)<1&&add.top<nav.top,
         targets:[...document.querySelectorAll('.mobile-nav button,.settings-actions button,.language-options button')]
           .every(el=>el.offsetHeight>=44&&el.offsetWidth>=44)
       };
     });
-    assert.ok(!layout.overflow&&layout.targets&&layout.top>=47&&layout.bottom>=34&&
+    assert.ok(!layout.overflow&&layout.centered&&layout.targets&&layout.top>=47&&layout.bottom>=34&&
       layout.padding>=layout.navHeight+layout.bottom,JSON.stringify(layout));
   }
   await page.evaluate(()=>{

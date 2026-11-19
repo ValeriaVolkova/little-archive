@@ -51,7 +51,7 @@ try{
   await cdp.send('PWA.changeAppUserSettings',{manifestId:url,displayMode:'standalone'});
   let app=await launch();const harness=await browser.newPage();await harness.goto(new URL('/harness',url).href);cdp=await browser.newCDPSession(harness);await tab.close();
   for(const candidate of browser.pages())if(candidate!==app&&candidate!==harness&&candidate.url().startsWith(url))await candidate.close();
-  await app.locator('.welcome-paper [data-action=newChild]').click();
+  await app.locator('.welcome-paper [data-action=newChild],#archive-results [data-action=newChild]').click();
   await app.locator('#profile-form [name=name]').fill('Test');
   await app.locator('#profile-form [name=birthday]').fill('2020-01-01');
   await app.locator('#profile-form [data-action=submit]').click();
@@ -93,7 +93,7 @@ try{
   await app.waitForFunction(async()=>!!(await navigator.serviceWorker.ready).waiting);
   if(await app.locator('.update-banner').count()){
     await app.locator('[data-action=applyUpdate]').click();
-    await app.waitForFunction(()=>document.querySelector('#chapter-child')&&performance.getEntriesByType('navigation')[0]?.type==='reload');
+    await app.waitForFunction(()=>document.querySelector('.archive-home')&&performance.getEntriesByType('navigation')[0]?.type==='reload');
   }
   await app.close();
   for(let i=0;i<150;i++){
@@ -130,7 +130,7 @@ try{
     assert.deepEqual(portable.bytes,before.bytes);
   }finally{await restoreBrowser.close();}
   console.log('PASS: installed app upgraded from previous release by closing and reopening the same installation');
-  await app.locator('.global-add').click();
+  await app.locator('.nav-add').click();
   await app.locator('#artwork-form [name=title]').fill('Unfinished');
   stage=2;failInstall=true;
   await app.evaluate(async()=>{await (await navigator.serviceWorker.ready).update();});
@@ -146,7 +146,7 @@ try{
   app.once('dialog',dialog=>dialog.accept());
   await app.locator('#artwork-form [data-action=close]').click();
   // Hold byte encoding mid-save, before the real IndexedDB commit.
-  await app.locator('.global-add').click();
+  await app.locator('.nav-add').click();
   await app.locator('#files').setInputFiles({name:'third.png',mimeType:'image/png',buffer:Buffer.from(before.bytes[0])});
   await app.locator('.crop-dialog [data-op=skip]').click();
   await app.waitForFunction(()=>document.querySelector('.draft-status')?.textContent?.includes('saved'));
@@ -163,12 +163,12 @@ try{
   await app.locator('#artwork-form').waitFor({state:'detached'});
   const saved=await snapshot(app);
   assert.equal(saved.archive.artworks.length,3);assert.deepEqual(saved.bytes.slice(0,2),before.bytes);
-  const other=await browser.newPage();await other.goto(url);await other.locator('.dashboard').waitFor();
+  const other=await browser.newPage();await other.goto(url);await other.locator('.archive-home').waitFor();
   await app.locator('[data-action=applyUpdate]').click();
   await app.locator('.update-banner').filter({hasText:'other Drawkeeper windows'}).waitFor();
   await other.close();
   await app.locator('[data-action=applyUpdate]').click();
-  await app.locator('.dashboard').waitFor();
+  await app.locator('.archive-home').waitFor();
   await app.locator('.mobile-nav [data-page=settings]').click();
   assert.match(await app.locator('[data-build]').innerText(),/aaaaaaaaaaaaaaaa/);
   assert.doesNotMatch(first,/aaaaaaaaaaaaaaaa/);
@@ -185,8 +185,8 @@ try{
   await navigation('settings','Настройки');
   await app.locator('[data-language=es]').click();
   assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
-  await navigation('home','Drawkeeper');
-  assert.equal(await app.locator('.brand-tagline').innerText(),'Pequeños dibujos. Grandes recuerdos.');
+  await navigation('home','Mi colección');
+  assert.equal(await app.locator('.collection-summary p').innerText(),'3 obras');
   await navigation('archive','Archivo');
   assert.equal(await app.locator('#archive-count').innerText(),'3 obras');
   await navigation('albums','Álbumes');
@@ -200,17 +200,17 @@ try{
   assert.deepEqual(await snapshot(app),spanishArchive);
   await browser.close();browser=await open();
   const blank=await browser.newPage();cdp=await browser.newCDPSession(blank);
-  app=await launch();await app.locator('#chapter-child').waitFor();
+  app=await launch();await app.locator('.archive-home').waitFor();
   assert.deepEqual(await snapshot(app),spanishArchive);
   assert.equal(await app.evaluate(async()=>(await (await import('./db.js')).readDrafts()).items[0].work.title),'Unfinished');
   await app.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));
   await browser.setOffline(true);
-  await app.reload();await app.locator('#chapter-child').waitFor();
+  await app.reload();await app.locator('.archive-home').waitFor();
   assert.ok(await app.evaluate(async()=>{
     const fonts=[['700 28px Onest','Ёж Й Ы Щ Archive'],['600 16px Onest','Añadir dibujo'],['400 16px Onest','Книга Art']];
     const loaded=await Promise.all(fonts.map(([font,text])=>document.fonts.load(font,text)));
     return loaded.every(faces=>faces.length&&faces.every(face=>face.status==='loaded'))&&
-      getComputedStyle(document.querySelector('.welcome-paper h1')).fontFamily.includes('Onest');
+      getComputedStyle(document.querySelector('.archive-home h1')).fontFamily.includes('Onest');
   }));
   assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
   await app.locator('.mobile-nav [data-page=archive]').click();

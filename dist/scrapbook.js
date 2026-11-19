@@ -1,4 +1,47 @@
-import {agePeriod} from './domain.js';
+import {ageAt,agePeriod,validDate} from './domain.js';
+
+export function familyStory({children,artworks}){
+  const artists=children.map(child=>({child,count:0,periods:new Map(),first:null,last:null}));
+  const byId=new Map(artists.map(artist=>[artist.child.id,artist]));
+  const dated=artworks.filter(work=>validDate(work.artworkDate)).sort((a,b)=>
+    a.artworkDate.localeCompare(b.artworkDate)||a.addedAt.localeCompare(b.addedAt)||a.id.localeCompare(b.id));
+  for(const work of artworks){
+    const artist=byId.get(work.childId);
+    if(artist)artist.count++;
+  }
+  const byAge=[];
+  for(const work of dated){
+    const artist=byId.get(work.childId);
+    if(!artist)continue;
+    const age=ageAt(artist.child.birthDate,work.artworkDate),entry={work,child:artist.child,age};
+    artist.first??=entry;
+    artist.last=entry;
+    if(!age)continue;
+    artist.periods.set(age.years,(artist.periods.get(age.years)||0)+1);
+    byAge.push(entry);
+  }
+  byAge.sort((a,b)=>a.age.total-b.age.total);
+  // A closest pair across different children is adjacent in age order.
+  const maxAgeGapMonths=3;
+  let sameAge=null,closest=maxAgeGapMonths+1;
+  for(let i=1;i<byAge.length;i++){
+    const a=byAge[i-1],b=byAge[i],distance=b.age.total-a.age.total;
+    if(a.child.id!==b.child.id&&distance<closest){
+      closest=distance;
+      sameAge=[a,b];
+    }
+  }
+  const timelines=artists.filter(artist=>artist.first&&artist.first!==artist.last);
+  const span=entry=>Date.parse(entry.last.work.artworkDate)-Date.parse(entry.first.work.artworkDate);
+  const longest=timelines.reduce((best,artist)=>!best||span(artist)>span(best)?artist:best,null);
+  return {
+    count:artworks.length,
+    artists:artists.map(({child,count,periods})=>({
+      child,count,periods:[...periods].sort(([a],[b])=>a-b)
+    })),
+    sameAge,timeline:longest?[longest.first,longest.last]:null
+  };
+}
 
 export function chapters(works,child){
   const counts=new Map();

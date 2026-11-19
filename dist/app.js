@@ -1,6 +1,6 @@
 import {coverTemplates,moveWork,albumDrag,fitAlbumDialog} from './album-ux.js';
 import {updateManager} from './pwa-update.js';
-import {chapters,layoutGallery} from './scrapbook.js';
+import {chapters,familyStory,layoutGallery} from './scrapbook.js';
 import {editCrop} from './crop-editor.js';
 import {storageErrorKey} from './storage-error.js';
 import {draftQueue} from './draft-queue.js';
@@ -13,7 +13,7 @@ import {createPDF} from './pdf.js';
 import {decoration} from './ui.js';
 
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
-let state=emptyArchive(),realState,demonstration=false,page='home',filters=archiveFilters(),busy=false,dirty=false,stale=false;
+let state=emptyArchive(),realState,demonstration=false,page='archive',filters=archiveFilters(),busy=false,dirty=false,stale=false;
 let section=null;
 let drafts=[],draftActive=false,draftState="idle";
 const lastChildKey='little-archive-last-child';
@@ -25,7 +25,7 @@ function preferredChild(){
 function rememberChild(id){try{localStorage.setItem(lastChildKey,id);}catch{}}
 // One history entry per open modal, including transitions from detail to edit.
 let dismissingFromHistory=false,consumingModalEntry=false;
-function routeState(){return {archivePage:page,section,filters:{...filters},chapterChild,scroll:window.scrollY};}
+function routeState(){return {archivePage:page,section,filters:{...filters},scroll:window.scrollY};}
 function rememberRoute(){history.replaceState(routeState(),'');}
 function pushRoute(){history.pushState(routeState(),'');}
 window.addEventListener('popstate',event=>{
@@ -39,7 +39,7 @@ window.addEventListener('popstate',event=>{
   }
   const route=event.state;
   if(route?.archivePage){
-    page=route.archivePage;section=route.section||null;filters={...archiveFilters(),...route.filters};chapterChild=route.chapterChild||'';
+    page=route.archivePage;section=route.section||null;filters={...archiveFilters(),...route.filters};
     render();window.scrollTo(0,route.scroll||0);
   }
 });
@@ -143,7 +143,14 @@ const updates=updateManager({
     control.disabled=applying;control.textContent=t('applyUpdate');
   }
 });
-function navigation(mobile=false){return '<nav class="'+(mobile?'mobile-nav':'navigation')+'">'+[['home','home'],['archive','grid'],['albums','album'],['settings','settings']].map(([id,sym])=>button('nav',t(id),(mobile?'':'nav-button ')+(page===id?'active':''),sym,'data-page="'+id+'" aria-current="'+(page===id?'page':'false')+'"')).join('')+'</nav>';}
+function navigation(mobile=false){
+  const tabs=[['home','home'],['archive','grid'],['albums','album'],['settings','settings']];
+  const tab=([id,symbol])=>button('nav',t(id),(mobile?'':'nav-button ')+(page===id?'active':''),symbol,
+    'data-page="'+id+'" aria-current="'+(page===id?'page':'false')+'"');
+  const items=tabs.map(tab);
+  if(mobile)items.splice(2,0,button('newWork','','nav-add','plus','aria-label="'+e(t('addArtwork'))+'"'));
+  return '<nav class="'+(mobile?'mobile-nav':'navigation')+'">'+items.join('')+'</nav>';
+}
 let stopAlbumDrag;
 function render(){
   stopAlbumDrag?.();stopAlbumDrag=null;
@@ -153,7 +160,7 @@ function render(){
   app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/icon.svg" alt=""><div><strong>'+appName+'</strong><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
   '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="childPage" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
   button('newChild',t('addChild'),'child-filter add','plus')+'<div class="side-foot">'+icon('lock')+'<div>'+e(t('local'))+'<br>'+e(t('private'))+'</div></div></aside><main class="main">'+
-  '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">'+appName+'</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+(page!=='home'?button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"'):'')+'</div></div>'+
+  '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">'+appName+'</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"')+'</div></div>'+
   '<section class="update-banner panel" hidden><span role="status"></span>'+button('applyUpdate',t('applyUpdate'),'secondary')+'</section>'+
   (section?.type==='album'?albumView(section.id):section?.type==='child'?childView(section.id):{home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
   hydrate();updates.show();
@@ -162,27 +169,51 @@ function render(){
     ()=>!busy&&!modal.open&&!updates.applying);
 
 }
-let chapterChild='', filtersExpanded=false;
+let filtersExpanded=false;
 function displayTitle(work){return /\.(jpe?g|png|heic|heif|webp)$/i.test(work.title.trim())?'':work.title.trim();}
 const coverMotifs={cream:'arcs',peach:'waves',sage:'checker',sky:'loop',
   lavender:'offset',butter:'tiles',terracotta:'ribbon',paper:'lines'};
 const motif=(name,className)=>`<svg class="playful-motif ${className}" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><use href="./assets/playful-motifs.svg#${name}"/></svg>`;
+function storyPhoto({work,child,age},label){
+  const photo=imagesById.get(work.coverImageId);
+  return `<button type="button" class="story-photo" data-action="detail" data-id="${e(work.id)}">
+    <span class="story-print"><img loading="lazy" width="${photo.width}" height="${photo.height}" data-path="${e(coverPath(work))}" alt="${e(displayTitle(work)||t('untitled'))}"></span>
+    <strong>${e(label||child.name)}</strong>
+    <small>${e(label?dateText(work.artworkDate):ageText(age))}</small>
+  </button>`;
+}
+function ageChart({child,periods},index,max){
+  return `<div class="age-chart tone-${index%5}"><h3>${e(child.name)}</h3>
+    <div class="age-bars">${periods.map(([period,count])=>`
+      <button type="button" data-action="openPeriod" data-id="${e(child.id)}" data-period="${period}"
+        aria-label="${e(periodText(period)+' · '+countText(count))}">
+        <span class="age-column" aria-hidden="true" style="--height:${count/max}">
+          <span>${count}</span><i></i>
+        </span><small>${e(periodText(period))}</small>
+      </button>`).join('')}</div>
+  </div>`;
+}
 function dashboardView(){
-  const child=state.children.find(c=>c.id===chapterChild)||state.children[0];
-  return `<div class="dashboard"><header class="welcome-paper"><h1>${appName}</h1><div class="brand-tagline">${e(t('tagline'))}</div>
-    <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${motif('ribbon','welcome-pattern')}
-    ${button(child?'newWork':'newChild',t(child?'addDrawing':'addFirstChild'),'primary','plus')}
-    ${child?'':button('demo',t('tryDemo'),'text-button','arrow')}</header>
+  const story=familyStory(state);
+  const max=story.artists.reduce((highest,artist)=>Math.max(highest,...artist.periods.map(([,count])=>count)),1);
+  const charts=story.artists.map((artist,i)=>artist.periods.length?ageChart(artist,i,max):'').join('');
+  return `<div class="dashboard family-story">
+    <header class="collection-summary">
+      <h1>${e(t('myCollection'))}</h1><p>${e(countText(story.count))}</p>
+      ${motif('ribbon','collection-pattern')}
+    </header>
     ${demoBanner()}${draftBanner()}
-    ${child?`<section class="dashboard-section"><h2>${e(t('growingArt'))}</h2>
-      <label class="chapter-profile">${e(t('child'))} <select id="chapter-child">${state.children.map(c=>option(c.id,c.name,child.id)).join('')}</select> ${button('childPage',t('profile'),'text-button','','data-id="'+e(child.id)+'"')}</label>
-      <div class="period-grid">${chapters(state.artworks,child).map(([period,count])=>
-      `<button class="period-card tone-${period%5}" data-action="openPeriod" data-id="${e(child.id)}" data-period="${period}">
-      <strong>${e(periodText(period))}</strong><span>${e(countText(count))}</span></button>`).join('')||`<p class="dashboard-empty">${e(t('emptyChapters'))}</p>`}</div></section>`:''}
-    <div class="home-links">
-      ${button('nav',t('archive'),'secondary','grid','data-page="archive"')}
-      ${button('nav',t('albums'),'secondary','album','data-page="albums"')}
-    </div></div>`;
+    ${story.artists.length?`<section class="dashboard-section"><h2>${e(t('littleArtists'))}</h2>
+      <div class="artist-cards">${story.artists.map(({child,count},i)=>`
+        <button type="button" class="artist-card tone-${i%5}" data-action="openChildArchive" data-id="${e(child.id)}">
+          ${avatar(child)}<span><strong>${e(child.name)}</strong><small>${e(countText(count))}</small></span>${icon('chevron')}
+        </button>`).join('')}</div></section>`:''}
+    ${charts?`<section class="dashboard-section"><h2>${e(t('artByAge'))}</h2><div class="age-charts">${charts}</div></section>`:''}
+    ${story.sameAge?`<section class="dashboard-section"><h2>${e(t('atTheSameAge'))}</h2>
+      <div class="story-pair">${story.sameAge.map(entry=>storyPhoto(entry)).join('')}</div></section>`:''}
+    ${story.timeline?`<section class="dashboard-section"><h2>${e(t('firstAndLast'))}</h2><p class="story-child">${e(story.timeline[0].child.name)}</p>
+      <div class="story-pair">${storyPhoto(story.timeline[0],t('firstDrawing'))}${storyPhoto(story.timeline[1],t('latestDrawing'))}</div></section>`:''}
+  </div>`;
 }
 function draftBanner(){return drafts.length&&!demonstration?'<div class="draft-banner">'+button('drafts',t('resumeDraft')+' · '+drafts.length,'secondary','edit')+'</div>':'';}
 function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('grid')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
@@ -344,7 +375,7 @@ function profileEditor(id){
         if(photo)puts.push([record.profileImagePath,photo]);
       }
       await persist(next,puts,deletes);
-      if(first){page='home';rememberChild(record.id);}
+      if(first){page='archive';rememberChild(record.id);}
       busy=false;closeModal(true);render();toast(t('profileSaved'));
     }catch(err){inlineError(t(storageErrorKey(err)));}finally{busy=false;}
   };
@@ -711,7 +742,9 @@ app.onclick=async event=>{
     const action=el.dataset.action;
     if(action==='nav'&&(section||page!==el.dataset.page)){rememberRoute();section=null;page=el.dataset.page;render();window.scrollTo(0,0);pushRoute();}
     if(action==='openArchive')openArchive();
-    if(action==='openPeriod'){rememberRoute();openArchive(el.dataset.period,el.dataset.id);pushRoute();}
+    if(action==='openPeriod'||action==='openChildArchive'){
+      rememberRoute();openArchive(el.dataset.period||'',el.dataset.id);pushRoute();
+    }
     if(action==='language'){
       const previous=lang;
       setLanguage(el.dataset.language);
@@ -757,7 +790,7 @@ app.onclick=async event=>{
   }catch{toast(stale?t('syncNotice'):t('error'));}finally{pendingActions--;}
 };
 app.addEventListener('toggle',event=>{if(event.target.matches('.archive-options')&&event.target.isConnected)filtersExpanded=event.target.open;},true);
-app.onchange=event=>{if(event.target.id==='chapter-child'){chapterChild=event.target.value;render();return;}const map={'year-filter':'year','period-filter':'period','sort':'sort'};if(map[event.target.id]){filters[map[event.target.id]]=event.target.value;render();}};
+app.onchange=event=>{const map={'year-filter':'year','period-filter':'period','sort':'sort'};if(map[event.target.id]){filters[map[event.target.id]]=event.target.value;render();}};
 let searchTimer;
 app.oninput=event=>{
   if(event.target.id!=='search')return;
