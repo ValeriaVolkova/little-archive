@@ -1,25 +1,45 @@
 import {validDate,today} from './domain.js';
 
-export async function loadImage(blob){
+async function nativeImage(blob){
   const url=URL.createObjectURL(blob);
   try{return await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(Error('Invalid image'));image.src=url;});}
   finally{URL.revokeObjectURL(url);}
 }
+async function heifType(blob){
+  const header=new TextDecoder().decode(await blob.slice(4,12).arrayBuffer());
+  if(/^ftyp(?:heic|heix|hevc|hevx)$/.test(header))return 'image/heic';
+  if(/^ftyp(?:mif1|msf1)$/.test(header))return 'image/heif';
+  return null;
+}
+export async function loadImage(blob){
+  try{return await nativeImage(blob);}
+  catch(error){
+    if(!await heifType(blob))throw error;
+    const {heicTo}=await import('./vendor/heic-to.js');
+    return nativeImage(await heicTo({blob,type:'image/png'}));
+  }
+}
 export async function raster(blob,max=1600,rotation=0,crop=null){
-  const image=await loadImage(blob),sw=crop?crop.w*image.naturalWidth:image.naturalWidth,sh=crop?crop.h*image.naturalHeight:image.naturalHeight;
+  const image=blob instanceof HTMLImageElement?blob:await loadImage(blob),sw=crop?crop.w*image.naturalWidth:image.naturalWidth,sh=crop?crop.h*image.naturalHeight:image.naturalHeight;
   const scale=Math.min(1,max/Math.max(sw,sh)),w=Math.max(1,Math.round(sw*scale)),h=Math.max(1,Math.round(sh*scale)),canvas=document.createElement('canvas');
   const sideways=Math.abs(rotation%180)===90;canvas.width=sideways?h:w;canvas.height=sideways?w:h;
   const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(rotation*Math.PI/180);
   if(crop)ctx.drawImage(image,crop.x*image.naturalWidth,crop.y*image.naturalHeight,sw,sh,-w/2,-h/2,w,h);else ctx.drawImage(image,-w/2,-h/2,w,h);
-  const result=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Cannot encode image')),'image/jpeg',0.92));
-  return {blob:result,width:canvas.width,height:canvas.height};
+  try{
+    const result=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Cannot encode image')),'image/jpeg',0.92));
+    return {blob:result,width:canvas.width,height:canvas.height};
+  }finally{canvas.width=canvas.height=0;}
 }
 export async function preparePhoto(file){
   if(file.size>128*1024*1024)throw Error('Image too large');
+  if(!file.type||file.type==='application/octet-stream'){
+    const type=await heifType(file);
+    if(type)file=file.slice(0,file.size,type);
+  }
   if(!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type))throw Error('Unsupported image type');
   const image=await loadImage(file);
   if(image.naturalWidth>40000||image.naturalHeight>40000||image.naturalWidth*image.naturalHeight>120000000)throw Error('Image dimensions too large');
-  return {blob:file,width:image.naturalWidth,height:image.naturalHeight,thumb:(await raster(file,640)).blob};
+  return {blob:file,preview:image,width:image.naturalWidth,height:image.naturalHeight,thumb:(await raster(image,640)).blob};
 }
 export function download(blob,name){
   const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);

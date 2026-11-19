@@ -42,10 +42,10 @@ async function waitFor(find){
   }
   throw Error('Application did not reach the expected state');
 }
-const makeImage=type=>{
+const makeImage=(type,width=20,height=32)=>{
   const canvas=document.createElement('canvas');
-  canvas.width=20;canvas.height=32;
-  const ctx=canvas.getContext('2d');ctx.fillStyle='#E96345';ctx.fillRect(0,0,20,32);
+  canvas.width=width;canvas.height=height;
+  const ctx=canvas.getContext('2d');ctx.fillStyle='#E96345';ctx.fillRect(0,0,width,height);
   return new Promise(resolve=>canvas.toBlob(resolve,type));
 };
 const appFrame=()=>{
@@ -217,7 +217,30 @@ async function checkPhaseTwo(db,photo,expected){
     const input=form.querySelector('#files');
     input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
   };
+  // Synthetic solid square encoded by pillow-heif. No personal metadata.
+  const heic=new Blob([Uint8Array.from(atob('AAAAHGZ0eXBoZWljAAAAAG1pZjFoZWljbWlhZgAAAX1tZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAABoQABAAAAAAAAAB0AAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABodmMxAAAAAA5waXRtAAAAAAABAAAA/WlwcnAAAADdaXBjbwAAAHZodmNDAQNwAAAAkAAAAAAAHvAA/P34+AAADwNgAAEAGEABDAH//wNwAAADAJAAAAMAAAMAHroCQGEAAQAqQgEBA3AAAAMAkAAAAwAAAwAeoCCBBZbq5Ka5uAhoMCAAAAMDIAAAAwAhYgABAAZEAcFzwIkAAAATY29scm5jbHgAAQANAAaAAAAAFGlzcGUAAAAAAAAAQAAAAEAAAAAoY2xhcAAAACAAAAABAAAAIAAAAAH////gAAAAAv///+AAAAACAAAAEHBpeGkAAAAAAwgICAAAABhpcG1hAAAAAAAAAAEAAQWBAgMFhAAAACVtZGF0AAAAGSgBrxOA+BDhp3/1Wo//teM8PlYuvzopDPg='),c=>c.charCodeAt(0))]);
+  choose(heic,'square.heic');
+  await click('.crop-dialog [data-op=rotate]');
+  await click('.crop-dialog [data-op=done]');
+  await waitFor(()=>!query('.crop-dialog'));
+  const square=await waitFor(()=>query('#photo-list img')?.naturalWidth);
+  assert(square===32,'HEIC crop preview is not the expected square');
+  choose(await makeImage('image/png',160,80),'landscape.png');
+  const surface=await waitFor(()=>query('.crop-dialog canvas'));
+  const bounds=surface.getBoundingClientRect();
+  const scale=Math.min((bounds.width-32)/160,(bounds.height-32)/80);
+  const left=bounds.left+(bounds.width-160*scale)/2,top=bounds.top+(bounds.height-80*scale)/2;
+  // Synthetic events have no OS pointer to capture. Geometry and handlers are real.
+  surface.setPointerCapture=()=>{};
+  const gesture=(type,x,y)=>surface.dispatchEvent(new frame.contentWindow.PointerEvent(type,{
+    pointerId:1,pointerType:'touch',clientX:left+x*scale,clientY:top+y*scale,bubbles:true}));
+  gesture('pointerdown',0,0);gesture('pointermove',40,8);gesture('pointerup',40,8);
+  gesture('pointerdown',100,44);gesture('pointermove',90,40);gesture('pointerup',90,40);
+  await click('.crop-dialog [data-op=done]');
+  await waitFor(()=>!query('.crop-dialog')&&query('#photo-list img')?.naturalWidth===120);
+  assert(Math.abs(query('#photo-list img').naturalHeight-72)<=1,'Touch handles constrained aspect ratio');
   choose(photo,'first.png');
+  await click('.crop-dialog [data-op=skip]');
   const preview=await waitFor(()=>form.querySelector('#photo-list img')?.src);
   const jpeg=await makeImage('image/jpeg');
   // JPEG DateTimeOriginal with a different date, injected into a real image.
@@ -234,6 +257,13 @@ async function checkPhaseTwo(db,photo,expected){
   assert(await photoDate(replacement)==='2023-02-15','Test JPEG has no readable EXIF capture date');
   choose(replacement,'replacement.jpg');
   await waitFor(()=>form.querySelector('#photo-list img')?.src!==preview);
+  await click('.crop-dialog [data-op=in]');
+  await click('.crop-dialog [data-op=rotate]');
+  await click('.crop-dialog [data-op=done]');
+  await waitFor(()=>!query('.crop-dialog'));
+  await click('#photo-list [data-action=crop]');
+  await click('.crop-dialog [data-op=reset]');
+  await click('.crop-dialog [data-op=cancel]');
   assert(form.elements.date.value==='2021-01-01','EXIF overwrote manual date');
   await click('#artwork-form [data-action=submit]');
   await waitFor(()=>{
@@ -253,13 +283,37 @@ async function checkPhaseTwo(db,photo,expected){
   assert(query('.art-grid [data-id="'+newWork.id+'"]'),'New artwork not visible in Archive');
   const newBackup=await inspectBackup(await createBackup(added,readFile));
   assert(newBackup.incoming.artworks.find(w=>w.id===newWork.id).uncategorized===true,'ZIP lost the optional-category flag');
+  const cropped=newPhotos[0];
+  assert(cropped.cropSettings.rotation===90&&cropped.width===26&&cropped.height===16,'Wrong landscape dimensions or saved recipe');
+  const restored=newBackup.incoming.images.find(i=>i.id===cropped.id);
+  equal(restored.cropSettings,cropped.cropSettings,'ZIP lost crop settings');
+  equal(await bytes(newBackup.verifiedFiles.get(cropped.editedPath)),await bytes(await readFile(cropped.editedPath)),'ZIP lost edited pixels');
+  const card=query('.art-grid [data-id="'+newWork.id+'"] img')||query('.art-grid [data-id="'+newWork.id+'"]').closest('.work-card').querySelector('img');
+  await waitFor(()=>card.naturalWidth===26&&card.naturalHeight===16);
+  await click('.art-grid [data-action=detail][data-id="'+newWork.id+'"]');
+  await click('#modal [data-action=edit]');
+  await click('#photo-list [data-action=crop]');
+  await click('.crop-dialog [data-op=reset]');
+  await click('.crop-dialog [data-op=done]');
+  await waitFor(()=>!query('.crop-dialog'));
+  await click('#artwork-form [data-action=submit]');
+  await waitFor(()=>!query('#artwork-form'));
+  const reset=(await readArchive()).images.find(i=>i.id===cropped.id);
+  assert(!reset.editedPath&&!reset.cropSettings&&reset.width===20&&reset.height===32,'Reopened crop did not restore original framing');
+  equal(await bytes(await readFile(reset.originalPath)),await bytes(replacement),'Reset changed original bytes');
+  passed.push('Square HEIC, portrait PNG and JPEG crop, landscape thumbnail, cancellation, ZIP recipe and re-edit from original');
   passed.push('Quick Add replaces the preview, preserves a manual date against EXIF, and saves exactly one original');
 
   const library=document.createElement('script');library.src=base+'vendor/pdf-lib.min.js';
   const pdfLoaded=new Promise((resolve,reject)=>{library.onload=resolve;library.onerror=reject;});
   document.head.append(library);await pdfLoaded;
   const {createPDF}=await import(base+'pdf.js');
-  const pdf=await createPDF(added,added.albums[0],readFile,true,()=>{});
+  const restorePlan=planRestore({version:1,children:[],artworks:[],images:[],albums:[]},newBackup.incoming,newBackup.verifiedFiles);
+  const restoredFiles=new Map(restorePlan.puts);
+  equal(await bytes(restoredFiles.get(cropped.originalPath)),await bytes(replacement),'Restore plan lost original');
+  assert(restoredFiles.has(cropped.originalPath+'.thumb'),'Restore omitted gallery thumbnail');
+  const pdf=await createPDF(restorePlan.archive,{...added.albums[0],childId:newWork.childId,orderedArtworkIds:[newWork.id]},
+    path=>{assert(path===cropped.editedPath,'PDF used uncropped original');return restoredFiles.get(path);},true,()=>{});
   const parsed=await window.PDFLib.PDFDocument.load(await pdf.blob.arrayBuffer());
   assert(parsed.getPageCount()===2&&parsed.getTitle()==='Альбом','PDF export lost its cover or artwork page');
   passed.push('PDF export still produces a readable A4 book with a Cyrillic album title');
@@ -285,5 +339,12 @@ async function checkPhaseTwo(db,photo,expected){
   assert(firstState.children.length===1&&firstState.artworks.length===0,'Onboarding mixed demo records into the archive');
   passed.push('First opening offers a first profile and returns to a clean Dashboard after creation');
   first.remove();
+  const merge=planRestore(firstState,newBackup.incoming,newBackup.verifiedFiles);
+  await commit(merge.archive,merge.puts,[],null,merge.missingOriginals);
+  const stored=(await readArchive()).images.find(i=>i.id===cropped.id);
+  equal(stored.cropSettings,cropped.cropSettings,'Restore transaction lost recipe');
+  equal(await bytes(await readFile(stored.originalPath)),await bytes(replacement),'Restore transaction changed original');
+  equal(await bytes(await readFile(stored.editedPath)),await bytes(restoredFiles.get(cropped.editedPath)),'Restore transaction changed edited image');
+  passed.push('ZIP v1 restore commits crop settings, edited image and byte-identical original together');
 }
 run().catch(error=>report({error:error.stack||String(error)}));

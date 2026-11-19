@@ -1,3 +1,4 @@
+import {editCrop} from './crop-editor.js';
 import {storageErrorKey} from './storage-error.js';
 import {draftQueue} from './draft-queue.js';
 import {emptyArchive,today,validDate,ageAt,archiveFilters,dashboardData,filterWorks,deleteWork,validateArchive,categories,displayCategory,workCategory} from './domain.js';
@@ -200,7 +201,7 @@ async function artworkEditor(id,recovered=null){
   const originalWork=state.artworks.find(w=>w.id===id),work=originalWork||recovered?.work||{childId:preferredChild(),title:'',artworkDate:today(),category:'',notes:'',isFavorite:false};
   const legacyDraft=!id&&(recovered?.photos?.length||0)>1;
   const canPick=!id&&!legacyDraft;
-  let photos=recovered?.photos||[],cover=originalWork?.coverImageId||recovered?.cover||null,selectedCrop=null,photosReady=!originalWork;
+  let photos=recovered?.photos||[],cover=originalWork?.coverImageId||recovered?.cover||null,photosReady=!originalWork;
   let manualDate=recovered?(recovered.manualDate??true):!!id;
   const draftId=recovered?.id||crypto.randomUUID();let draftRevision=recovered?.revision||0;
   const field=(key,html)=>'<label class="field">'+e(t(key))+html+'</label>';
@@ -229,11 +230,7 @@ async function artworkEditor(id,recovered=null){
       if(action==='submit')modal.querySelector('form').requestSubmit();
       const p=photos.find(p=>p.id===el.dataset.id);
       if(action==='cover'){cover=p.id;dirty=true;paintPhotos();}
-      if(action==='rotate'){busy=true;try{const r=await raster(p.edited||p.original,6000,90);const thumb=await raster(r.blob,640);Object.assign(p,{edited:r.blob,width:r.width,height:r.height,thumb:thumb.blob,changed:true});dirty=true;paintPhotos();}finally{busy=false;}}
-      if(action==='restore'){busy=true;try{const image=await loadImage(p.original),thumb=await raster(p.original,640);Object.assign(p,{edited:null,width:image.naturalWidth,height:image.naturalHeight,thumb:thumb.blob,changed:true});dirty=true;paintPhotos();}finally{busy=false;}}
-      if(action==='crop'){selectedCrop=p;openCrop(p);}
-      if(action==='applyCrop'){await applyCrop();}
-      if(action==='cancelCrop'){modal.querySelector('#crop-inline')?.remove();selectedCrop=null;}
+      if(action==='crop'&&p){busy=true;try{await openCrop(p);}finally{busy=false;}}
     }});
   const form=modal.querySelector('form');
   draftActive=!id&&!demonstration;draftState=recovered?'saved':'idle';
@@ -249,8 +246,8 @@ async function artworkEditor(id,recovered=null){
     if(dirty)autosave();
     const root=modal.querySelector('#photo-list');if(!root)return;
     root.innerHTML=photos.map(p=>'<div class="photo-tile"><img src="'+temporaryURL(p.thumb)+'" alt="'+e(t('photos'))+'">'+
-      (!canPick?'<div class="photo-tools">'+(photos.length>1?button('cover',t(cover===p.id?'cover':'makeCover'),'cover-button '+(cover===p.id?'active':''),'','data-id="'+e(p.id)+'"'):'')+
-      [['rotate','rotate','rotate'],['crop','crop','crop'],...(p.edited?[['restore','original','arrow']]:[])].map(([action,key,symbol])=>button(action,'','',symbol,'data-id="'+e(p.id)+'" aria-label="'+e(t(key))+'"')).join('')+'</div>':'')+'</div>').join('');
+      '<div class="photo-tools">'+(photos.length>1?button('cover',t(cover===p.id?'cover':'makeCover'),'cover-button '+(cover===p.id?'active':''),'','data-id="'+e(p.id)+'"'):'')+
+      button('crop',t('crop'),'secondary','crop','data-id="'+e(p.id)+'"')+'</div></div>').join('');
     const label=form.querySelector('#photo-source-label');
     if(label)label.textContent=t(photos.length?'replacePhoto':'photoSource');
   }
@@ -261,9 +258,11 @@ async function artworkEditor(id,recovered=null){
     try{
       const file=files[0],data=await preparePhoto(file),captured=fromCamera?null:await photoDate(file);
       const photo={id:crypto.randomUUID(),original:data.blob,edited:null,width:data.width,height:data.height,thumb:data.thumb};
+      const before={photos,cover,date:form.elements.date.value};
       photos=[photo];cover=photo.id;
       form.elements.date.value=chooseArtworkDate(manualDate,form.elements.date.value,captured);
       zone.open=false;dirty=true;inlineError('');paintPhotos();
+      await openCrop(photo,()=>{photos=before.photos;cover=before.cover;form.elements.date.value=before.date;paintPhotos();},data.preview);
     }catch{inlineError(t('imageError'));}finally{busy=false;form.querySelectorAll('input[type=file]').forEach(input=>input.value='');}
   }
   const zone=form.querySelector('#dropzone');
@@ -273,16 +272,18 @@ async function artworkEditor(id,recovered=null){
     zone.ondragleave=()=>zone.classList.remove('dragover');
     zone.ondrop=event=>{event.preventDefault();zone.classList.remove('dragover');acceptFiles([...event.dataTransfer.files]);};
   }
-  function openCrop(p){
-    modal.querySelector('#crop-inline')?.remove();
-    const div=document.createElement('section');div.id='crop-inline';div.innerHTML='<p class="help">'+e(t('cropHint'))+'</p><div class="crop-wrapper"><div class="crop-stage"><img src="'+temporaryURL(p.edited||p.original)+'" alt=""><div class="crop-box" hidden></div></div></div><div class="buttons">'+button('cancelCrop',t('cancel'))+button('applyCrop',t('apply'),'primary')+'</div>';
-    form.querySelector('#photo-list').after(div);const stage=div.querySelector('.crop-stage'),box=div.querySelector('.crop-box');let start;
-    p.crop=null;
-    stage.onpointerdown=event=>{const r=stage.getBoundingClientRect();start={x:(event.clientX-r.left)/r.width,y:(event.clientY-r.top)/r.height};stage.setPointerCapture(event.pointerId);};
-    stage.onpointermove=event=>{if(!start)return;const r=stage.getBoundingClientRect(),x=Math.max(0,Math.min(1,(event.clientX-r.left)/r.width)),y=Math.max(0,Math.min(1,(event.clientY-r.top)/r.height));p.crop={x:Math.min(start.x,x),y:Math.min(start.y,y),w:Math.abs(x-start.x),h:Math.abs(y-start.y)};box.hidden=false;Object.assign(box.style,{left:p.crop.x*100+'%',top:p.crop.y*100+'%',width:p.crop.w*100+'%',height:p.crop.h*100+'%'});};
-    stage.onpointerup=()=>start=null;stage.onpointercancel=()=>start=null;
+  async function openCrop(p,onCancel,preview){
+    const source=preview||await loadImage(p.original);
+    editCrop(source,p.cropSettings,!!p.edited&&!p.cropSettings,t,async recipe=>{
+      const full=recipe.rotation===0&&recipe.x<1e-9&&recipe.y<1e-9&&recipe.w>1-1e-9&&recipe.h>1-1e-9;
+      if(full&&!p.edited)return;
+      const result=full?null:await raster(source,4096,recipe.rotation,recipe);
+      const thumb=(await raster(result?.blob||source,640)).blob;
+      Object.assign(p,{edited:result?.blob||null,thumb,width:result?.width||source.naturalWidth,
+        height:result?.height||source.naturalHeight,cropSettings:full?null:recipe,changed:true});
+      dirty=true;paintPhotos();
+    },onCancel);
   }
-  async function applyCrop(){const p=selectedCrop;if(!p?.crop||p.crop.w<.02||p.crop.h<.02)return;busy=true;try{const r=await raster(p.edited||p.original,6000,0,p.crop),thumb=await raster(r.blob,640);Object.assign(p,{edited:r.blob,width:r.width,height:r.height,thumb:thumb.blob,changed:true});dirty=true;paintPhotos();modal.querySelector('#crop-inline').remove();selectedCrop=null;}finally{busy=false;}}
   if(originalWork){
     busy=true;
     try{
@@ -291,7 +292,7 @@ async function artworkEditor(id,recovered=null){
         const original=await getFile(meta.originalPath),edited=meta.editedPath?await getFile(meta.editedPath):null;
         let generatedThumb=false;
         const thumb=await getFile(meta.originalPath+'.thumb').catch(async()=>{generatedThumb=true;return (await raster(edited||original,640)).blob;});
-        loaded.push({id:meta.id,original,edited,width:meta.width,height:meta.height,thumb,meta,generatedThumb});
+        loaded.push({id:meta.id,original,edited,width:meta.width,height:meta.height,thumb,meta,cropSettings:meta.cropSettings,generatedThumb});
       }
       photos=loaded;photosReady=true;paintPhotos();
     }catch{form.querySelector('[data-action=submit]').disabled=true;inlineError(t('editPhotosUnavailable'));}finally{busy=false;}
@@ -317,7 +318,7 @@ async function artworkEditor(id,recovered=null){
         if(p.edited&&(!p.meta||p.changed))puts.push([editedPath,p.edited]);
         if(p.meta?.editedPath&&p.meta.editedPath!==editedPath)deletes.push(p.meta.editedPath);
         if(!p.meta||p.changed||p.generatedThumb)puts.push([originalPath+'.thumb',p.thumb]);
-        next.images.push({...p.meta,id:p.id,artworkId,originalPath,editedPath,width:p.width,height:p.height,sortOrder:p.meta?.sortOrder??order});
+        next.images.push({...p.meta,id:p.id,artworkId,originalPath,editedPath,...(p.changed||p.cropSettings?{cropSettings:p.cropSettings??null}:{}),width:p.width,height:p.height,sortOrder:p.meta?.sortOrder??order});
       }
       for(const album of next.albums)if(album.childId!==record.childId)album.orderedArtworkIds=album.orderedArtworkIds.filter(x=>x!==artworkId);
       await persist(next,puts,deletes,!id&&!demonstration?{id:draftId,revision:draftRevision}:null);

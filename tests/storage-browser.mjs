@@ -8,6 +8,9 @@ import {extname,join,resolve} from 'node:path';
 const executable=process.env.BROWSER_PATH;
 if(!executable)throw Error('Set BROWSER_PATH to a Chromium browser executable');
 const pagesArtifact=process.argv[2]?resolve(process.argv[2]):null;
+const previousArtifact=process.argv[3]?resolve(process.argv[3]):null;
+if(previousArtifact&&!pagesArtifact)throw Error('Pass the updated artifact before the previous artifact');
+let servedArtifact=previousArtifact||pagesArtifact;
 const profile=await mkdtemp(join(tmpdir(),'little-archive-test-'));
 console.log('Isolated test profile:',profile);
 let finish,fail;
@@ -24,15 +27,21 @@ const server=createServer(async(req,res)=>{
     return;
   }
   if(path==='/test'){
-    res.writeHead(200,{'Content-Type':'text/html'}).end('<script type="module" src="/tests/storage-browser.js"></script>');
+    const script=previousArtifact?'upgrade-browser.js':'storage-browser.js';
+    res.writeHead(200,{'Content-Type':'text/html'}).end('<script type="module" src="/tests/'+script+'"></script>');
+    return;
+  }
+  if(path==='/publish-test-update'&&req.method==='POST'&&previousArtifact){
+    servedArtifact=pagesArtifact;
+    res.writeHead(204).end();
     return;
   }
   if(pagesArtifact&&path.startsWith('/little-archive/')){
     const relative=path.slice('/little-archive/'.length)||'index.html';
     if(!/^[\w./-]+$/.test(relative)||relative.includes('..')){res.writeHead(404).end();return;}
     try{
-      const data=await readFile(join(pagesArtifact,relative));
-      res.writeHead(200,{'Content-Type':types[extname(relative)]||'application/octet-stream'}).end(data);
+      const data=await readFile(join(servedArtifact,relative));
+      res.writeHead(200,{'Content-Type':types[extname(relative)]||'application/octet-stream','Cache-Control':'max-age=0, must-revalidate'}).end(data);
     }catch{res.writeHead(404).end();}
     return;
   }

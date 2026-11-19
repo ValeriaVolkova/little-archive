@@ -170,3 +170,11 @@ dialog{border:1px solid var(--line);border-radius:var(--radius-lg);background:va
   .topbar{flex-wrap:wrap}
 }
 @media(max-width:340px){.memory-card{grid-template-columns:1fr}.memory-card img{width:100%}.family-overview div{gap:4px}}
+.crop-dialog {padding:18px;width:min(640px,100%);overflow:auto;color:var(--ink);background:var(--paper)}
+.crop-dialog h2,.crop-dialog p {margin:0 0 10px}
+.crop-dialog canvas {display:block;width:100%;height:clamp(160px,52dvh,520px);background:#403a37;border-radius:14px;touch-action:none;user-select:none}
+.crop-controls,.crop-footer {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-top:10px}
+.crop-dialog button {border-radius:14px;min-width:44px;min-height:44px;padding:8px 12px;background:var(--bg);color:var(--ink)}
+.crop-dialog button.primary {background:var(--ink);color:white}
+.crop-dialog [role=alert]{color:#963529}
+@media(max-width:600px){.crop-dialog{padding:16px 14px max(14px,env(safe-area-inset-bottom));margin:auto}}

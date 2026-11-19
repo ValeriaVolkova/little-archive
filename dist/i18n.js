@@ -66,6 +66,10 @@ demoReset:['Перейти к своему архиву','Go to my archive'],all
 moveUp:['Выше','Move up'],moveDown:['Ниже','Move down'],selectAll:['Выбрать все','Select all'],emptyProfile:['Создайте профиль ребёнка','Create a child profile'],forChild:['Коллекция','Collection'],onlyLocal:['Остаётся только у вас','It stays with you'],storageError:['Хранилище браузера недоступно. Откройте сайт в обычном окне браузера и разрешите хранение данных.','Browser storage is unavailable. Open the site in a regular browser window and allow site data.'],
 backupDone:['Резервная копия подготовлена','Backup is ready'],profileSaved:['Профиль сохранён','Profile saved'],demoChanges:['Изменение в демо-коллекции','Demo collection updated'],addToAlbumTitle:['Добавить работу в альбом','Add artwork to an album'],
 photoHint:['Оригинал хранится отдельно. Поворот не изменяет исходную фотографию.','The original is kept separately. Rotation never changes the original photo.'],
+cropInstructions:['Перемещайте рамку или потяните за угол. Разведите два пальца для увеличения.','Drag the frame or a corner. Spread two fingers to zoom in.'],
+cropLegacy:['Эта фотография была обработана раньше. Новую рамку можно выбрать на оригинале.','This photo has an earlier edit. Choose a new crop on the original.'],
+cropDone:['Готово','Done'],cropSkip:['Пропустить','Skip'],cropReset:['Сбросить','Reset'],
+zoomIn:['Увеличить','Zoom in'],zoomOut:['Уменьшить','Zoom out'],
 crop:['Обрезать','Crop'],apply:['Применить','Apply'],cropHint:['Потяните рамку на фотографии. Оригинал сохранится.','Drag a rectangle on the photo. The original is preserved.'],
 noAlbum:['Для этого ребёнка пока нет альбомов.','This child has no albums yet.'],busyClose:['Дождитесь окончания операции.','Please wait for the operation to finish.'],
 syncNotice:['Архив изменился в другой вкладке. Обновите страницу перед сохранением.','The archive changed in another tab. Reload before saving.']
