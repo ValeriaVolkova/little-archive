@@ -1,6 +1,6 @@
 import {coverTemplates,moveWork,albumDrag,fitAlbumDialog} from './album-ux.js';
 import {updateManager} from './pwa-update.js';
-import {dailyMemory,chapters,layoutGallery} from './scrapbook.js';
+import {chapters,layoutGallery} from './scrapbook.js';
 import {editCrop} from './crop-editor.js';
 import {storageErrorKey} from './storage-error.js';
 import {draftQueue} from './draft-queue.js';
@@ -163,53 +163,23 @@ function render(){
 
 }
 let chapterChild='', filtersExpanded=false;
-const memoryKey='little-archive-daily-memory';
-const selections=new Map();
-function memoryOfDay(){
-  const key=demonstration?'demo':memoryKey,day=today();
-  let previous=selections.get(key);
-  if(!demonstration){try{previous=JSON.parse(localStorage.getItem(key))||previous;}catch{}}
-  const work=dailyMemory(state.artworks,day,previous);
-  if(work&&(previous?.day!==day||previous.id!==work.id)){
-    const choice={day,id:work.id};
-    if(!demonstration){try{localStorage.setItem(key,JSON.stringify(choice));}catch{}}
-  }
-  if(work)selections.set(key,{day,id:work.id});
-  return work;
-}
 function displayTitle(work){return /\.(jpe?g|png|heic|heif|webp)$/i.test(work.title.trim())?'':work.title.trim();}
 const coverMotifs={cream:'flower',peach:'waves',sage:'checker',sky:'cloud',
   lavender:'waves',butter:'sun',terracotta:'eyes',paper:'rainbow'};
 const motif=(name,className)=>`<svg class="playful-motif ${className}" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><use href="./assets/playful-motifs.svg#${name}"/></svg>`;
 function dashboardView(){
   const child=state.children.find(c=>c.id===chapterChild)||state.children[0];
-  const memory=memoryOfDay(),title=memory&&displayTitle(memory);
   return `<div class="dashboard"><header class="welcome-paper"><h1>${appName}</h1><div class="brand-tagline">${e(t('tagline'))}</div>
     <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${motif('flower','welcome-bloom')}${motif('checker','welcome-checker')}
     ${button(child?'newWork':'newChild',t(child?'addDrawing':'addFirstChild'),'primary','plus')}
     ${child?'':button('demo',t('tryDemo'),'text-button','arrow')}</header>
     ${demoBanner()}${draftBanner()}
-    <section class="dashboard-section"><h2>${e(t('dailyMemory'))}</h2>
-    ${memory?`<button class="memory-card daily-card" data-action="detail" data-id="${e(memory.id)}">
-      <img decoding="async" data-path="${e(coverPath(memory))}" alt="">
-      <span>${title?`<strong>${e(title)}</strong>`:''}<small>${childLabel(memory.childId)}${validDate(memory.artworkDate)?' · '+e(dateText(memory.artworkDate)):''}</small>
-      ${memory.notes?`<span class="memory-note">${e(memory.notes)}</span>`:''}</span></button>`:
-      `<p class="dashboard-empty">${e(t('emptyHint'))}</p>`}</section>
     ${child?`<section class="dashboard-section"><h2>${e(t('growingArt'))}</h2>
       <label class="chapter-profile">${e(t('child'))} <select id="chapter-child">${state.children.map(c=>option(c.id,c.name,child.id)).join('')}</select> ${button('childPage',t('profile'),'text-button','','data-id="'+e(child.id)+'"')}</label>
       <div class="period-grid">${chapters(state.artworks,child).map(([period,count])=>
       `<button class="period-card tone-${period%5}" data-action="openPeriod" data-id="${e(child.id)}" data-period="${period}">
       <strong>${e(periodText(period))}</strong><span>${e(countText(count))}</span></button>`).join('')||`<p class="dashboard-empty">${e(t('emptyChapters'))}</p>`}</div></section>`:''}</div>`;
 }
-function refreshDailyMemory(){
-  if(page==='home'&&app.querySelector('.dashboard')&&state.artworks.length&&selections.get(demonstration?'demo':memoryKey)?.day!==today())render();
-}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDailyMemory();});
-function scheduleMidnight(){
-  const now=new Date(),next=new Date(now);next.setHours(24,0,0,0);
-  setTimeout(()=>{refreshDailyMemory();scheduleMidnight();},next-now+100);
-}
-scheduleMidnight();
 function draftBanner(){return drafts.length&&!demonstration?'<div class="draft-banner">'+button('drafts',t('resumeDraft')+' · '+drafts.length,'secondary','edit')+'</div>':'';}
 function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('spark')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
 function archiveHero(){

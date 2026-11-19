@@ -1,13 +1,5 @@
 import {agePeriod} from './domain.js';
 
-export function dailyMemory(works,day,previous,random=Math.random){
-  if(!works.length)return null;
-  const last=works.find(w=>w.id===previous?.id);
-  if(last&&previous.day===day)return last;
-  const choices=last&&works.length>1?works.filter(w=>w!==last):works;
-  return choices[Math.floor(random()*choices.length)];
-}
-
 export function chapters(works,child){
   const counts=new Map();
   for(const work of works){

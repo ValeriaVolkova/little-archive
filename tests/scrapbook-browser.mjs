@@ -46,10 +46,12 @@ try{
       puts.push([originalPath,s.blob],[originalPath+'.thumb',s.blob]);
     }
     await commit(state,puts);
-    const {today}=await import('/domain.js');
-    localStorage.setItem('little-archive-daily-memory',JSON.stringify({day:today(),id:'sample-0'}));
   });
-  await page.reload();await page.locator('.daily-card img').evaluate(img=>img.decode());
+  await page.reload();await page.locator('#chapter-child').waitFor();
+  assert.equal(await page.locator('.dashboard [data-action=detail]').count(),0);
+  const gap=await page.locator('.welcome-paper + .dashboard-section').evaluate(el=>
+    el.getBoundingClientRect().top-el.previousElementSibling.getBoundingClientRect().bottom);
+  assert.ok(gap>=0&&gap<=24,'Unexpected gap between banner and chapters: '+gap);
   await page.evaluate(()=>document.fonts.ready);
   await page.screenshot({path:join(output,'Home.png')});
   await page.locator('#chapter-child').scrollIntoViewIfNeeded();
@@ -58,13 +60,13 @@ try{
   const signature=()=>page.evaluate(async()=>{
     const {readArchive,readFile}=await import('/db.js');const archive=await readArchive();
     const blob=await readFile(archive.images[0].originalPath);
-    return {archive,digest:[...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))],lang:localStorage.getItem('little-archive-language'),memory:document.querySelector('.daily-card').dataset.id};
+    return {archive,digest:[...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))],lang:localStorage.getItem('little-archive-language')};
   });
   const albums=await checkAlbums(page,url,output,chromium);
   await page.locator('.mobile-nav [data-page=home]').click();
   const before=await signature();
   await browser.close();browser=await open();page=await browser.newPage();await page.goto(url);
-  await page.locator('.daily-card').waitFor();assert.deepEqual(await signature(),before);
+  await page.locator('#chapter-child').waitFor();assert.deepEqual(await signature(),before);
   assert.deepEqual(before.archive.albums.find(a=>a.id===albums.id).orderedArtworkIds,albums.order);
   await page.locator('.mobile-nav [data-page=archive]').click();
   await page.locator('.masonry img').first().evaluate(img=>img.decode());
@@ -102,5 +104,5 @@ try{
   page.once('dialog',async dialog=>{prompted=true;await dialog.dismiss();});
   await page.goBack();
   assert.equal(await title.inputValue(),'Unsaved edit');assert.ok(prompted);
-  console.log('PASS: two independent Chromium launches retain 500 works, profiles, daily choice and original bytes; sorted gallery, bounded thumbnail loads, browser Back, mobile screenshots.');
+  console.log('PASS: two independent Chromium launches retain 500 works, profiles and original bytes; sorted gallery, bounded thumbnail loads, browser Back, mobile screenshots.');
 }finally{await browser?.close();server.close();}

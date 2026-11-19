@@ -36,7 +36,7 @@ appVersion:['Версия приложения','App version',"Versión de la ap
 updating:['Открываем новую версию…','Opening the new version…',"Abriendo la nueva versión…"],
 updateOtherWindows:['Сохраните работу и закройте другие окна Drawkeeper, затем нажмите «Обновить».','Save your work and close other Drawkeeper windows, then choose Update.',"Guarda tu trabajo y cierra las otras ventanas de Drawkeeper. Después, pulsa «Actualizar»."],
 updateRetry:['Обновление можно повторить.','You can retry the update.',"Puedes volver a intentar la actualización."],
-addDrawing:['Добавить рисунок','Add artwork',"Añadir dibujo"],dailyMemory:['Воспоминание из архива','Memory from the archive',"Un recuerdo del archivo"],
+addDrawing:['Добавить рисунок','Add artwork',"Añadir dibujo"],
 growingArt:['Маленькая история взросления','Growing up in art',"Crecer dibujando"],filters:['Фильтры','Filters',"Filtros"],
 emptyChapters:['Здесь появятся главы, когда у рисунка будет дата, а у ребёнка — дата рождения.','Chapters appear when your child has a birthday and a dated artwork.',"Añade una obra con fecha y la fecha de nacimiento en el perfil para ver las etapas."],
 home:['Главная','Home',"Inicio"],welcomeFirst:['Сохраните первые рисунки и поделки в семейном архиве.','Save the first drawings and crafts in your family archive.',"Guarda los primeros dibujos y manualidades en tu archivo familiar."],

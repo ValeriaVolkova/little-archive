@@ -116,12 +116,10 @@ body,.field,.field input,.field select,.field textarea,input,textarea,select,but
 .welcome-bloom,.welcome-checker {position:absolute;z-index:-1;}
 .welcome-bloom {width:clamp(140px,30%,265px);right:-16px;top:4%;color:var(--pink);transform:rotate(15deg);}
 .welcome-checker {width:112px;right:-17px;bottom:-30px;color:var(--lilac);transform:rotate(-13deg);}
-.dashboard {gap:18px;}
+.dashboard {gap:var(--space-4,16px);}
 .dashboard-section h2 {font:700 clamp(24px,4vw,34px)/1.12 var(--font-display);}
 .memory-card {border-radius:var(--radius);background:var(--paper);border-color:var(--line);color:var(--ink);}
-.daily-card img {border-radius:var(--radius-sm);background:var(--cream);}
-.daily-card strong {font-size:23px;}
-.daily-card small,.period-card>span:last-child {color:var(--text-subtle);font-weight:700;}
+.period-card>span:last-child {color:var(--text-subtle);font-weight:700;}
 .period-card,.period-card.tone-1,.period-card.tone-2,.period-card.tone-3,.period-card.tone-4 {
   color:var(--ink);background:var(--chapter,var(--blue-pale));border:1px solid var(--line);
   min-height:66px;border-radius:var(--radius-sm);padding:12px;box-shadow:var(--shadow-paper);

@@ -178,13 +178,9 @@ async function checkPhaseTwo(db,photo,expected){
     input.dispatchEvent(new Event('input',{bubbles:true}));
     input.dispatchEvent(new Event('change',{bubbles:true}));
   };
-  const memory=await waitFor(()=>query('.daily-card'));
-  assert(doc().querySelectorAll('.daily-card').length===1&&!query('.family-overview'),'Home duplicates gallery');
-  await click('.daily-card');
-  await waitFor(()=>query('#detail-image'));
-  await click('#modal [data-action=close]');
-  await nav('archive');await nav('home');
-  assert(query('.daily-card').dataset.id===memory.dataset.id,'Daily selection changed across tabs');
+  await waitFor(()=>query('#chapter-child'));
+  assert(query('.welcome-paper [data-action=newWork]')&&query('.chapter-profile [data-action=childPage]'),'Home lost add or profile');
+  assert(doc().querySelectorAll('.dashboard-section').length===1&&!query('.dashboard [data-action=detail]'),'Home contains an extra artwork section');
   value(query('#chapter-child'),'misha');
   assert(query('.mobile-nav [aria-current=page]').dataset.page==='home','Initial tab was not Home');
   assert(doc().documentElement.scrollWidth<=390,'Dashboard overflows a 390px viewport');
@@ -199,7 +195,7 @@ async function checkPhaseTwo(db,photo,expected){
   assert(query('.child-tabs [data-id=""]').getAttribute('aria-pressed')==='true','Archive nav did not default to All children');
   assert(doc().querySelectorAll('.art-grid .work-card').length===2,'Family archive omitted a child');
   assert(doc().documentElement.scrollWidth<=390,'Archive overflows a 390px viewport');
-  passed.push('Home opens a stable memory, switches child chapters and retains combined Archive filters');
+  passed.push('Home keeps add and profile, switches child chapters and retains combined Archive filters');
 
   await click('.art-grid [data-id=work-0][data-action=detail]');
   await click('#modal [data-action=edit]');
@@ -404,6 +400,7 @@ async function checkPhaseTwo(db,photo,expected){
   value(profile.elements.name,'Новый профиль');value(profile.elements.birthday,'2021-04-29');
   profile.querySelector('[data-action=submit]').click();
   await waitFor(()=>firstQuery('.welcome-paper [data-action=newWork]'));
+  assert(firstQuery('#chapter-child')&&!firstQuery('.dashboard [data-action=detail]'),'Empty Home has unexpected artwork cards');
   const firstState=await readArchive();
   assert(firstState.children.length===1&&firstState.artworks.length===0,'Onboarding mixed demo records into the archive');
   passed.push('First opening offers a first profile and returns to a clean Dashboard after creation');

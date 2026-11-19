@@ -93,7 +93,7 @@ try{
   await app.waitForFunction(async()=>!!(await navigator.serviceWorker.ready).waiting);
   if(await app.locator('.update-banner').count()){
     await app.locator('[data-action=applyUpdate]').click();
-    await app.waitForFunction(()=>document.querySelector('.daily-card')&&performance.getEntriesByType('navigation')[0]?.type==='reload');
+    await app.waitForFunction(()=>document.querySelector('#chapter-child')&&performance.getEntriesByType('navigation')[0]?.type==='reload');
   }
   await app.close();
   for(let i=0;i<150;i++){
@@ -200,13 +200,12 @@ try{
   assert.deepEqual(await snapshot(app),spanishArchive);
   await browser.close();browser=await open();
   const blank=await browser.newPage();cdp=await browser.newCDPSession(blank);
-  app=await launch();await app.locator('.daily-card').waitFor();
+  app=await launch();await app.locator('#chapter-child').waitFor();
   assert.deepEqual(await snapshot(app),spanishArchive);
   assert.equal(await app.evaluate(async()=>(await (await import('./db.js')).readDrafts()).items[0].work.title),'Unfinished');
   await app.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));
   await browser.setOffline(true);
-  await app.reload();await app.locator('.daily-card').waitFor();
-  await app.waitForFunction(()=>document.querySelector('.daily-card img')?.naturalWidth>0);
+  await app.reload();await app.locator('#chapter-child').waitFor();
   assert.ok(await app.evaluate(async()=>{
     const fonts=[['700 28px "Balsamiq Sans"','Ёж Й Ы Щ Archive'],['400 18px "Balsamiq Sans"','Ёлка Home'],['400 16px Nunito','Книга Art']];
     const loaded=await Promise.all(fonts.map(([font,text])=>document.fonts.load(font,text)));
@@ -214,6 +213,8 @@ try{
       getComputedStyle(document.querySelector('.welcome-paper h1')).fontFamily.includes('Balsamiq Sans');
   }));
   assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
+  await app.locator('.mobile-nav [data-page=archive]').click();
+  await app.waitForFunction(()=>document.querySelector('.work-card img')?.naturalWidth>0);
   await app.locator('.mobile-nav [data-page=albums]').click();
   assert.ok(await app.evaluate(async()=> (await fetch('./assets/playful-motifs.svg')).ok));
   assert.match(await app.locator('.book-jacket').first().getAttribute('class'),/jacket-lavender/);

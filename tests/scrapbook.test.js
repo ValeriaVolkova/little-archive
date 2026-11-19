@@ -1,17 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dailyMemory,chapters,arrange} from '../dist/scrapbook.js';
+import {chapters,arrange} from '../dist/scrapbook.js';
 
-test('daily memory handles empty, single, added and deleted records and a local date rollover',()=>{
-  const works=Array.from({length:500},(_,i)=>({id:String(i)}));
-  assert.equal(dailyMemory([],'a'),null);
-  const pick=dailyMemory(works,'a',null,()=>.5);
-  const saved={day:'a',id:pick.id};
-  assert.equal(dailyMemory([...works,{id:'new'}],'a',saved),pick);
-  assert.notEqual(dailyMemory(works,'b',saved,()=>.5),pick);
-  assert.equal(dailyMemory([pick],'b',saved),pick);
-  assert.equal(dailyMemory(works.slice(0,1),'a',saved),works[0]);
-});
 test('chapters reuse birthdays independently of siblings and ignore missing dates',()=>{
   const works=['2023-01-01','2024-01-01','2022-12-31'].map(artworkDate=>({artworkDate,childId:'one'}));
   works.push({childId:'two',artworkDate:'2025-01-01'});
