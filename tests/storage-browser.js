@@ -326,12 +326,12 @@ async function checkPhaseTwo(db,photo,expected){
   const parsed=await window.PDFLib.PDFDocument.load(await pdf.blob.arrayBuffer());
   assert(parsed.getPageCount()===2&&parsed.getTitle()==='Альбом','PDF export lost its cover or artwork page');
   passed.push('PDF export still produces a readable A4 book with a Cyrillic album title');
-  await click('[data-language=en]');
+  await nav('settings');await click('[data-language=en]');await nav('archive');
   assert(query('.child-tabs [data-id=""]').textContent==='All children','English family labels did not load');
   const search=query('#search');search.focus();value(search,'Быстрое');
   await waitFor(()=>doc().querySelectorAll('.art-grid .work-card').length===1);
   assert(doc().activeElement===search&&query('.art-grid .work-open').dataset.id===newWork.id,'Search replaced its focused field or returned wrong results');
-  await click('[data-language=ru]');
+  await nav('settings');await click('[data-language=ru]');
   passed.push('Mobile-width navigation switches RU/EN and search keeps focus while filtering Cyrillic');
   frame.remove();
 

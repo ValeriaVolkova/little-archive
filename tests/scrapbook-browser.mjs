@@ -58,7 +58,7 @@ try{
   const signature=()=>page.evaluate(async()=>{
     const {readArchive,readFile}=await import('/db.js');const archive=await readArchive();
     const blob=await readFile(archive.images[0].originalPath);
-    return {archive,digest:[...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))],memory:document.querySelector('.daily-card').dataset.id};
+    return {archive,digest:[...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))],lang:localStorage.getItem('little-archive-language'),memory:document.querySelector('.daily-card').dataset.id};
   });
   const albums=await checkAlbums(page,url,output,chromium);
   await page.locator('.mobile-nav [data-page=home]').click();

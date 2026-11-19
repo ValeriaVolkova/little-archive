@@ -9,7 +9,7 @@ import {runInNewContext} from 'node:vm';
 // dropped into dist are excluded unless explicitly reviewed and listed here.
 const allowedFiles=[
   'index.html','manifest.webmanifest','style.css','editorial.css','sw.js',
-  'app.js','pwa-update.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
+  'app.js','album-ux.js','pwa-update.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
   'vendor/heic-to.js','vendor/heic-to.LICENSE.txt','crop-editor.js','scrapbook.js','media.js','pdf.js','storage-codec.js','storage-error.js','ui.js','zip.js',
   'assets/background-doodles.svg','assets/fish.svg','assets/flowers.svg',
   'assets/house.svg','assets/icon.svg','assets/leaf.svg','assets/rainbow.svg',
@@ -28,7 +28,7 @@ for(const name of allowedFiles){
   hash.update(name).update('\0').update(createHash('sha256').update(content).digest());
 }
 const release=hash.digest('hex').slice(0,16);
-files.set('app.js',Buffer.from(replaceOnce(files.get('app.js').toString('utf8'),/const buildVersion='3B-local';/,"const buildVersion='3B · "+release+"';")));
+files.set('app.js',Buffer.from(replaceOnce(files.get('app.js').toString('utf8'),/const buildVersion='3B.1-local';/,"const buildVersion='3B.1 · "+release+"';")));
 const site=new URL('https://example.github.io/project-review/');
 function checkPath(ref,from){
   assert(ref.startsWith('./')||ref.startsWith('../'),`Non-relative URL in ${from}: ${ref}`);

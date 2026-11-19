@@ -1,3 +1,4 @@
+import {coverTemplates,moveWork,albumDrag,fitAlbumDialog} from './album-ux.js';
 import {updateManager} from './pwa-update.js';
 import {dailyMemory,chapters,layoutGallery} from './scrapbook.js';
 import {editCrop} from './crop-editor.js';
@@ -9,7 +10,7 @@ import {readArchive,readFile,commit,clientId,readDrafts,saveDraft} from './db.js
 import {t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
 import {preparePhoto,raster,loadImage,download,photoDate,chooseArtworkDate} from './media.js';
 import {createPDF} from './pdf.js';
-import {decoration,coverDecoration,albumTheme} from './ui.js';
+import {decoration} from './ui.js';
 
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 let state=emptyArchive(),realState,demonstration=false,page='home',filters=archiveFilters(),busy=false,dirty=false,stale=false;
@@ -128,10 +129,10 @@ const footer=(label=t('save'),action='submit')=>'<footer class="modal-footer">'+
 modal.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
 modal.addEventListener('click',event=>{const el=event.target.closest('[data-action]');if(!el)return;if(el.dataset.action==='close')closeModal();else if(modalAction)Promise.resolve(modalAction(el.dataset.action,el,event)).catch(()=>inlineError(t('saveError')));});
 
-const buildVersion='3B-local';
+const buildVersion='3B.1-local';
 let pendingActions=0;
 const updates=updateManager({
-  safe:()=>!busy&&!dirty&&!pendingActions&&!document.querySelector('dialog[open]'),
+  safe:()=>!busy&&!dirty&&!pendingActions&&!document.querySelector('dialog[open],.album-gallery.reordering'),
   reload:()=>location.reload(),
   paint:({available,applying,notice})=>{
     const banner=app.querySelector('.update-banner');
@@ -143,17 +144,23 @@ const updates=updateManager({
   }
 });
 function navigation(mobile=false){return '<nav class="'+(mobile?'mobile-nav':'navigation')+'">'+[['home','home'],['archive','grid'],['albums','album'],['settings','settings']].map(([id,sym])=>button('nav',t(id),(mobile?'':'nav-button ')+(page===id?'active':''),sym,'data-page="'+id+'" aria-current="'+(page===id?'page':'false')+'"')).join('')+'</nav>';}
+let stopAlbumDrag;
 function render(){
+  stopAlbumDrag?.();stopAlbumDrag=null;
   imagesById=new Map(state.images.map(image=>[image.id,image]));
   if(filters.child&&!state.children.some(c=>c.id===filters.child))filters.child='';
   document.documentElement.lang=lang;app.dataset.page=page;
   app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/icon.svg" alt=""><div><strong>Little Archive</strong><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
   '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="childPage" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
   button('newChild',t('addChild'),'child-filter add','plus')+'<div class="side-foot">'+icon('lock')+'<div>'+e(t('local'))+'<br>'+e(t('private'))+'</div></div></aside><main class="main">'+
-  '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">Little Archive</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span><button class="language '+(lang==='ru'?'active':'')+'" data-action="language" data-language="ru" aria-label="Русский">RU</button><button class="language '+(lang==='en'?'active':'')+'" data-action="language" data-language="en" aria-label="English">EN</button>'+(page!=='home'?button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"'):'')+'</div></div>'+
+  '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">Little Archive</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+(page!=='home'?button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"'):'')+'</div></div>'+
   '<section class="update-banner panel" hidden><span role="status"></span>'+button('applyUpdate',t('applyUpdate'),'secondary')+'</section>'+
   (section?.type==='album'?albumView(section.id):section?.type==='child'?childView(section.id):{home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
   hydrate();updates.show();
+  const gallery=app.querySelector('.album-gallery');
+  if(gallery)stopAlbumDrag=albumDrag(gallery,ids=>saveAlbumOrder(gallery.dataset.album,ids),
+    ()=>!busy&&!modal.open&&!updates.applying);
+
 }
 let chapterChild='', filtersExpanded=false;
 const memoryKey='little-archive-daily-memory';
@@ -242,14 +249,16 @@ function archiveView(){
   '<div class="collection-label"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong>'+ button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+'</div>'+
   (works.length?button('pickForAlbum',t('selectWorks'),'text-button'):'')+'<div id="archive-results">'+archiveResults(works)+'</div>';
 }
-function albumCover(a){
-  const work=state.artworks.find(w=>w.id===(a.coverArtworkId||a.orderedArtworkIds[0]));
-  return work?'<img class="book-photo" data-path="'+e(coverPath(work))+'" alt="">':coverDecoration(albumTheme(a.id));
+function albumCover(album){
+  const work=state.artworks.find(w=>w.id===album.coverArtworkId);
+  const template=coverTemplates.includes(album.coverTemplate)?album.coverTemplate:'cream';
+  return `<div class="album-cover book-jacket jacket-${template}${work?' has-art':''}">
+    ${work?'<img class="book-photo" data-path="'+e(coverPath(work))+'" alt="">':''}
+    <h3>${e(album.title||t('albumPlaceholder'))}</h3></div>`;
 }
 function albumCards(albums){
   return '<div class="album-grid">'+albums.map(a=>`<button class="book-card" data-action="album" data-id="${e(a.id)}">
-    <div class="album-cover theme-${albumTheme(a.id)}">${albumCover(a)}<h3>${e(a.title)}</h3></div>
-    <div class="book-caption"><span>${e(countText(a.orderedArtworkIds.length))}</span>${icon('chevron')}</div></button>`).join('')+'</div>';
+    ${albumCover(a)}<div class="book-caption"><span>${e(countText(a.orderedArtworkIds.length))}</span>${icon('chevron')}</div></button>`).join('')+'</div>';
 }
 function albumsView(){
   return hero(t('albums'),t('albumSubtitle'),'newAlbum',t('createAlbum'))+demoBanner()+
@@ -503,55 +512,83 @@ function albumView(id){
   const a=state.albums.find(a=>a.id===id);if(!a)return albumsView();
   const works=new Map(state.artworks.map(w=>[w.id,w]));
   return `<div class="dashboard album-story"><header class="panel album-front">
-    <div class="album-portrait theme-${albumTheme(id)}">${albumCover(a)}</div>
+    <div class="album-portrait">${albumCover(a)}</div>
     <h1>${e(a.title)}</h1>${a.description?'<p>'+e(a.description)+'</p>':''}
     <p>${a.childId?childLabel(a.childId):e(t('familyAlbum'))} · ${e(countText(a.orderedArtworkIds.length))}</p>
     <div class="buttons">${button('albumPick',t('addWorks'),'primary','plus')}
       <details><summary class="secondary">${e(t('edit'))}</summary>
         ${button('albumEdit',t('albumSettings'))}${button('albumDelete',t('delete'),'danger')}</details></div></header>
-    ${a.orderedArtworkIds.length?'<div class="art-grid masonry">'+a.orderedArtworkIds.map(id=>workCard(works.get(id))).join('')+'</div>':
+    ${a.orderedArtworkIds.length?'<div class="art-grid masonry album-gallery" data-album="'+e(id)+'">'+a.orderedArtworkIds.map((id,i)=>albumWorkCard(works.get(id),i,a.orderedArtworkIds.length)).join('')+'</div>':
       '<p class="dashboard-empty">'+e(t('emptyBook'))+'</p>'}
     <div class="panel"><label class="check"><input id="captions" type="checkbox" checked>${e(t('captions'))}</label>
       ${button('albumPDF',t('pdf'),'secondary','download',a.orderedArtworkIds.length?'':'disabled')}</div></div>`;
 }
+function albumWorkCard(work,index,count){
+  const attrs='data-id="'+e(work.id)+'"';
+  const menu='<details class="album-card-menu"><summary aria-label="'+e(t('artworkActions'))+'">···</summary><div>'+
+    button('albumEarlier',t('moveUp'),'secondary','up',attrs+(index===0?' disabled':''))+
+    button('albumLater',t('moveDown'),'secondary','down',attrs+(index===count-1?' disabled':''))+
+    button('albumUnlink',t('unlink'),'secondary','close',attrs)+'</div></details>';
+  return workCard(work).replace('</article>',menu+'</article>');
+}
+async function saveAlbumOrder(albumId,ids,focusId,focusAction){
+  if(busy||updates.applying)return;
+  const next=structuredClone(state),i=next.albums.findIndex(a=>a.id===albumId);
+  if(i<0)return;
+  busy=true;
+  try{
+    next.albums[i]=albumMembers(next.albums[i],ids);await persist(next);render();
+    if(focusId){
+      const action=app.querySelector('[data-action="'+focusAction+'"][data-id="'+focusId+'"]');
+      const menu=action?.closest('details');if(menu){menu.open=true;(action.disabled?menu.querySelector('summary'):action).focus();}
+    }
+  }catch{toast(t(stale?'syncNotice':'saveError'));}finally{busy=false;}
+}
 function albumEditor(id,preselected=[]){
-  const existing=state.albums.find(a=>a.id===id),works=new Map(state.artworks.map(w=>[w.id,w]));
+  const existing=state.albums.find(a=>a.id===id);
   let selected=[...(existing?.orderedArtworkIds||preselected)],child=existing?.childId||'';
-  let cover=existing?.coverArtworkId||selected[0];
+  let cover=existing?.coverArtworkId||null,template=existing?.coverTemplate||'cream',showArt=!!cover;
   showModal(modalHeader(t(existing?'albumSettings':'createAlbum'))+`<form id="album-form"><div class="modal-body">
     <label class="field">${e(t('albumTitle'))}<input required maxlength="300" name="title" value="${e(existing?.title)}"></label>
     <label class="field">${e(t('description'))}<textarea maxlength="20000" name="description">${e(existing?.description)}</textarea></label>
     <label class="field">${e(t('child'))}<select name="child">${option('',t('familyAlbum'),child)+state.children.map(c=>option(c.id,c.name,child)).join('')}</select></label>
     <label class="field">${e(t('coverStyle'))}<select name="style">${['warm','minimal'].map(k=>option(k,t(k),existing?.coverStyle||'warm')).join('')}</select></label>
-    <label class="field">${e(t('cover'))}<select name="cover"></select></label>
-    <details class="order-editor"><summary class="secondary">${e(t('editOrder'))}</summary><div id="work-order"></div></details>
-    <div class="inline-error" role="alert"></div></div>${footer()}</form>`,{action:async(action,el)=>{
+    <fieldset class="cover-options"><legend>${e(t('cover'))}</legend><div id="cover-preview"></div>
+    <div id="cover-choices"></div></fieldset><div class="inline-error" role="alert"></div></div>${footer()}</form>`,{action:(action,el)=>{
       if(busy)return;
       if(action==='submit'){form.requestSubmit();return;}
-      const i=selected.indexOf(el.dataset.id);if(i<0)return;
-      if(action==='unlink'){selected.splice(i,1);if(!selected.includes(cover))cover=selected[0];}
-      else if(action==='up'&&i>0)[selected[i],selected[i-1]]=[selected[i-1],selected[i]];
-      else if(action==='down'&&i<selected.length-1)[selected[i],selected[i+1]]=[selected[i+1],selected[i]];
-      else return;
+      if(!['coverTemplate','coverArt','coverArtwork'].includes(action))return;
+      if(action==='coverTemplate'){template=el.dataset.template;cover=null;showArt=false;}
+      if(action==='coverArt'){showArt=!showArt;}
+      if(action==='coverArtwork'){cover=el.dataset.id;}
       dirty=true;paint();
+      const suffix=el.dataset.id?'[data-id="'+el.dataset.id+'"]':el.dataset.template?'[data-template="'+el.dataset.template+'"]':'';
+      form.querySelector('[data-action="'+action+'"]'+suffix)?.focus({preventScroll:true});
     }});
-  const form=modal.querySelector('form');form.oninput=()=>dirty=true;
-  function paint(){
-    form.elements.cover.innerHTML=selected.map((id,i)=>option(id,(i+1)+'. '+(displayTitle(works.get(id))||t('untitled')),cover)).join('');
-    form.elements.cover.disabled=!selected.length;
-    form.querySelector('#work-order').innerHTML=selected.map((id,i)=>{
-      const attrs='data-id="'+e(id)+'" ';
-      return '<div class="order-item"><img data-path="'+e(coverPath(works.get(id)))+'" alt=""><span>'+e(displayTitle(works.get(id))||t('untitled'))+'</span>'+
-        [['up','moveUp',i===0],['down','moveDown',i===selected.length-1],['unlink','unlink',false]].map(([action,label,disabled])=>
-          button(action,'','icon-button',action==='unlink'?'close':action,attrs+'aria-label="'+e(t(label))+'" '+(disabled?'disabled':''))).join('')+'</div>';
-    }).join('');hydrate(modal);
+  const form=modal.querySelector('form');modal.classList.add('album-dialog');modalCleanup=fitAlbumDialog(modal,form);
+  function preview(){
+    form.querySelector('#cover-preview').innerHTML=albumCover({title:form.elements.title.value,coverTemplate:template,coverArtworkId:cover});
+    hydrate(modal);
   }
-  form.elements.cover.onchange=()=>{cover=form.elements.cover.value;};
+  function paint(){
+    const choices=form.querySelector('#cover-choices');
+    choices.innerHTML='<div class="cover-swatches">'+coverTemplates.map(key=>`<button type="button" class="cover-swatch" data-action="coverTemplate" data-template="${key}" aria-pressed="${!cover&&template===key}"><span class="jacket-${key}" aria-hidden="true"></span>${e(t('jacket'+key))}</button>`).join('')+'</div>'+
+      (selected.length?button('coverArt',t('childArtworkCover'),'secondary','','aria-expanded="'+showArt+'"'):'')+
+      (showArt?'<div class="cover-artworks">'+selected.map(id=>{
+        const work=state.artworks.find(w=>w.id===id);
+        return `<button type="button" data-action="coverArtwork" data-id="${e(id)}" aria-pressed="${cover===id}" aria-label="${e(work.title||t('untitled'))}"><img data-path="${e(coverPath(work))}" alt=""></button>`;
+      }).join('')+'</div>':'');
+    preview();
+  }
+  form.oninput=event=>{dirty=true;if(event.target===form.elements.title)preview();};
   form.elements.child.onchange=()=>{
     const next=form.elements.child.value;
-    const eligible=selected.filter(id=>!next||works.get(id).childId===next);
+    const eligible=selected.filter(id=>!next||state.artworks.some(w=>w.id===id&&w.childId===next));
     if(eligible.length!==selected.length&&!confirm(t('changeAlbumChild'))){form.elements.child.value=child;return;}
-    child=next;selected=eligible;if(!selected.includes(cover))cover=selected[0];paint();
+    child=next;selected=eligible;
+    if(!selected.includes(cover))cover=null;
+    if(!selected.length)showArt=false;
+    paint();
   };
   paint();form.onsubmit=async event=>{
     event.preventDefault();if(busy)return;
@@ -559,7 +596,7 @@ function albumEditor(id,preselected=[]){
     busy=true;try{
       const next=structuredClone(state),record={...existing,id:id||crypto.randomUUID(),title,description:form.elements.description.value.trim(),
         childId:child||null,createdAt:existing?.createdAt||new Date().toISOString(),coverStyle:form.elements.style.value,
-        orderedArtworkIds:selected,coverArtworkId:cover||null};
+        orderedArtworkIds:selected,coverArtworkId:cover,coverTemplate:template};
       if(existing)next.albums[next.albums.findIndex(a=>a.id===id)]=record;else next.albums.push(record);
       await persist(next);closeModal(true);albumDetail(record.id);toast(t('saved'));
     }catch{inlineError(t('saveError'));}finally{busy=false;}
@@ -673,6 +710,12 @@ app.onclick=async event=>{
     if(action==='childPage')childPage(el.dataset.id);
     if(action==='editProfile')profileEditor(section.id);
     if(action==='childWorks'){rememberRoute();openArchive('',section.id);pushRoute();}
+    if(['albumEarlier','albumLater','albumUnlink'].includes(action)){
+      const album=state.albums.find(a=>a.id===section.id),id=el.dataset.id,ids=album.orderedArtworkIds;
+      const index=ids.indexOf(id)+(action==='albumEarlier'?-1:1);
+      await saveAlbumOrder(album.id,action==='albumUnlink'?ids.filter(value=>value!==id):moveWork(ids,id,index),
+        action==='albumUnlink'?null:id,action);
+    }
     if(action==='albumEdit')albumEditor(section.id);
     if(action==='albumPick')pickWorks(state.albums.find(a=>a.id===section.id));
     if(action==='albumPDF')await exportPDF(state.albums.find(a=>a.id===section.id),app.querySelector('#captions').checked);

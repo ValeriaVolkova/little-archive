@@ -16,7 +16,7 @@ const server=createServer(async(req,res)=>{
   try{
     let bytes=await readFile(join(stage?current:old,path));
     if(stage===2&&(path==='sw.js'||path==='app.js')){
-      const text=bytes.toString().replace(/(CACHE_PREFIX\+'|3B · )[a-f0-9]{16}/g,'$1aaaaaaaaaaaaaaaa');
+      const text=bytes.toString().replace(/(CACHE_PREFIX\+'|3B\.1 · )[a-f0-9]{16}/g,'$1aaaaaaaaaaaaaaaa');
       bytes=Buffer.from(text);
     }
     if(failInstall&&path==='scrapbook.js')return res.writeHead(503).end();
