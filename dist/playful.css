@@ -149,6 +149,36 @@ body,.field,.field input,.field select,.field textarea,input,textarea,select,but
 .masonry [aria-pressed=true] {outline-color:var(--focus);}
 .masonry [aria-pressed=true]::after {background:var(--focus);color:var(--white);}
 .collection-label,.archive-count {color:var(--text-subtle);}
+#app[data-page="archive"] {
+  --archive-blue:#4775E8;
+  --archive-ink:#090E1C;
+}
+#app[data-page="archive"],#app[data-page="archive"] .main {background:var(--archive-blue);}
+html:has(#app[data-page="archive"]) {background:#4775E8;}
+#app[data-page="archive"] .topbar {background:transparent;color:var(--archive-ink);margin-bottom:8px;}
+#app[data-page="archive"] .mobile-brand {color:white;}
+#app[data-page="archive"] :is(.archive-home-heading,.archive-toolbar) {color:var(--archive-ink);}
+.archive-home-heading {
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  min-height:46px;overflow:hidden;
+}
+.archive-home-heading h1 {color:white;}
+.archive-pattern {display:flex;align-items:center;gap:10px;flex:none;padding-right:3px;}
+.archive-arcs {width:42px;color:var(--yellow);}
+.archive-waves {width:54px;color:var(--blue);}
+#app[data-page="archive"] .child-tab:not(.active) {color:var(--archive-ink);}
+#app[data-page="archive"] .child-tab.active {background:var(--yellow);color:var(--archive-ink);}
+.archive-toolbar {min-height:44px;flex-wrap:wrap;gap:0 8px;margin-block:4px;}
+.archive-toolbar [data-action="pickForAlbum"] {margin-inline-start:auto;}
+#app[data-page="archive"] .archive-toolbar .text-button {color:var(--archive-ink);}
+#app[data-page="archive"] :is(.archive-toolbar,.child-tabs,#archive-results) :focus-visible {
+  outline-color:var(--white);
+}
+#archive-results .art-grid.masonry {--columns:2;column-gap:11px;}
+#archive-results .masonry :is(.work-open,img) {
+  background:transparent;border:0;border-radius:14px;box-shadow:none;
+}
+#archive-results .empty-art {display:none;}
 .album-card-menu summary {background:var(--cream);min-width:44px;min-height:44px;}
 .artwork-dialog .detail-photo {background:var(--blue-pale);}
 .artwork-dialog .detail-info {background:var(--cream);}

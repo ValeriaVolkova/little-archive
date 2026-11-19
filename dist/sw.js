@@ -1,4 +1,4 @@
-const CACHE='little-archive-shell-editorial-v27-retro';
+const CACHE='little-archive-shell-editorial-v28-blue-archive';
 const FILES=['./','./index.html','./style.css','./app.js','./domain.js','./db.js','./i18n.js','./media.js','./pdf.js','./zip.js','./vendor/pdf-lib.min.js','./assets/icon.svg','./assets/flowers.svg','./assets/rainbow.svg','./assets/fish.svg','./assets/house.svg','./assets/sun.svg','./assets/leaf.svg'];
 FILES.push('./playful.css','./assets/playful-motifs.svg','./assets/fonts/Onest.ttf','./album-ux.js','./pwa-update.js','./vendor/heic-to.js','./crop-editor.js','./scrapbook.js','./backup-restore.js','./storage-error.js','./storage-codec.js','./draft-queue.js','./editorial.css','./ui.js','./manifest.webmanifest');
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(path=>new Request(new URL(path,self.registration.scope),{cache:'reload'}))))));

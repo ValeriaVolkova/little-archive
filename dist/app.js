@@ -188,7 +188,8 @@ function draftBanner(){return drafts.length&&!demonstration?'<div class="draft-b
 function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('grid')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
 function archiveHero(){
   const profiles=[{id:'',name:t('familyFilter')},...state.children];
-  return `<section class="archive-home"><div class="archive-home-heading"><h1>${e(t('archive'))}</h1></div>
+  return `<section class="archive-home"><div class="archive-home-heading"><h1>${e(t('archive'))}</h1>
+      <div class="archive-pattern" aria-hidden="true">${motif('arcs','archive-arcs')}${motif('waves','archive-waves')}</div></div>
     <div class="child-tabs" role="group" aria-label="${e(t('profiles'))}">
       ${profiles.map(c=>button('filterChild',c.name,'child-tab '+(filters.child===c.id?'active':''),'',`data-id="${e(c.id)}" aria-pressed="${filters.child===c.id}"`)).join('')}
     </div></section>`;
@@ -222,8 +223,9 @@ function archiveView(){
   '<div class="category-chips">'+button('category',t('anyCategory'),'chip '+(!filters.category?'active':''),'','data-category=""')+categories.map(c=>button('category',t(c),'chip '+(filters.category===c?'active':''),'','data-category="'+c+'"')).join('')+'</div>'+
   '<div class="age-filter-row"><select id="period-filter" aria-label="'+e(t('ageCollections'))+'">'+option('',t('allAges'),filters.period)+[...periods].sort((a,b)=>a-b).map(n=>option(String(n),periodText(n),filters.period)).join('')+'</select>'+
   '</div></details>'+
-  '<div class="collection-label"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong>'+ button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+'</div>'+
-  (works.length?button('pickForAlbum',t('selectWorks'),'text-button'):'')+'<div id="archive-results">'+archiveResults(works)+'</div>';
+  '<div class="collection-label archive-toolbar"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong>'+
+  button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+
+  (works.length?button('pickForAlbum',t('selectWorks'),'text-button'):'')+'</div><div id="archive-results">'+archiveResults(works)+'</div>';
 }
 function albumCover(album,{caption=false,previewWork=false}={}){
   const explicit=state.artworks.find(w=>w.id===album.coverArtworkId);
