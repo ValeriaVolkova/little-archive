@@ -178,3 +178,25 @@ dialog{border:1px solid var(--line);border-radius:var(--radius-lg);background:va
 .crop-dialog button.primary {background:var(--ink);color:white}
 .crop-dialog [role=alert]{color:#963529}
 @media(max-width:600px){.crop-dialog{padding:16px 14px max(14px,env(safe-area-inset-bottom));margin:auto}}
+
+/* Scrapbook and archive reuse the family dashboard's paper, type and controls. */
+.dashboard .daily-card{display:block;padding:var(--space-3);width:100%;text-align:left}
+.daily-card img{display:block;width:100%;height:auto;max-height:36dvh;object-fit:contain;background:var(--bg)}
+.daily-card>span{display:block;padding:var(--space-2) var(--space-1) 0}
+.daily-card strong{font:850 18px/1.25 var(--font-display)}
+.memory-note{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:var(--space-1);overflow-wrap:anywhere}
+.chapter-profile{display:flex;gap:var(--space-2);align-items:center;min-width:0}
+.chapter-profile select{width:auto;max-width:75%;min-width:0;font-size:16px}
+.period-grid>.dashboard-empty{grid-column:1/-1}
+.archive-search .search{max-width:none}
+.archive-options{margin-top:var(--space-2)}
+.archive-options summary{display:flex;align-items:center;gap:var(--space-2);min-height:44px;width:fit-content;cursor:pointer;font-weight:700}
+.archive-options summary::after{content:'⌄'}
+.archive-options[open] summary::after{transform:rotate(180deg)}
+.archive-options summary::-webkit-details-marker{display:none}
+.art-grid.masonry{--columns:2;display:block;position:relative;column-gap:var(--space-2);margin:0}
+.masonry .work-card{animation:none;position:absolute;top:0;left:0;margin:0;padding:0}
+.masonry .work-open,.masonry img{display:block;width:100%;height:100%;border:0;padding:0;border-radius:var(--radius-sm);background:var(--paper);object-fit:contain}
+@media(min-width:760px){.art-grid.masonry{--columns:3;column-gap:var(--space-3)}}
+@media(min-width:1250px){.art-grid.masonry{--columns:4}}
+@media(max-width:600px){.welcome-paper>.primary{width:100%;min-height:48px}}

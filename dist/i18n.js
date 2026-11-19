@@ -1,6 +1,9 @@
 export let lang=localStorage.getItem('little-archive-language')||(navigator.language.startsWith('ru')?'ru':'en');
 export const setLanguage=v=>{lang=v;localStorage.setItem('little-archive-language',v);document.documentElement.lang=v;};
 const words={
+addDrawing:['Добавить рисунок','Add artwork'],dailyMemory:['Воспоминание из архива','Memory from the archive'],
+growingArt:['Маленькая история взросления','Growing up in art'],filters:['Фильтры','Filters'],
+emptyChapters:['Здесь появятся главы, когда у рисунка будет дата, а у ребёнка — дата рождения.','Chapters appear when your child has a birthday and a dated artwork.'],
 home:['Главная','Home'],welcomeFirst:['Сохраните первые рисунки и поделки в семейном архиве.','Save the first drawings and crafts in your family archive.'],
 welcomeFamily:['Здесь растёт история вашего творчества.','This is where your family’s creativity grows.'],
 addFirstChild:['Создать первый профиль','Create the first profile'],tryDemo:['Посмотреть демо','Explore the demo'],

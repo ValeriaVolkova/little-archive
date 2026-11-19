@@ -1,3 +1,4 @@
+import {dailyMemory,chapters,layoutGallery} from './scrapbook.js';
 import {editCrop} from './crop-editor.js';
 import {storageErrorKey} from './storage-error.js';
 import {draftQueue} from './draft-queue.js';
@@ -7,7 +8,7 @@ import {readArchive,readFile,commit,clientId,readDrafts,saveDraft} from './db.js
 import {t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
 import {preparePhoto,raster,loadImage,download,photoDate,chooseArtworkDate} from './media.js';
 import {createPDF} from './pdf.js';
-import {decoration,coverDecoration,albumTheme,visualIndex} from './ui.js';
+import {decoration,coverDecoration,albumTheme} from './ui.js';
 
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 let state=emptyArchive(),realState,demonstration=false,page='home',filters=archiveFilters(),busy=false,dirty=false,stale=false;
@@ -19,6 +20,26 @@ function preferredChild(){
   return (state.children.some(c=>c.id===saved)?saved:'')||filters.child||state.children[0]?.id||'';
 }
 function rememberChild(id){try{localStorage.setItem(lastChildKey,id);}catch{}}
+// One history entry per open modal, including transitions from detail to edit.
+let dismissingFromHistory=false,consumingModalEntry=false;
+function routeState(){return {archivePage:page,filters:{...filters},chapterChild,scroll:window.scrollY};}
+function rememberRoute(){history.replaceState(routeState(),'');}
+function pushRoute(){history.pushState(routeState(),'');}
+window.addEventListener('popstate',event=>{
+  if(consumingModalEntry){consumingModalEntry=false;if(modal.open&&!history.state?.archiveModal)history.pushState({archiveModal:true},'');return;}
+  if(modal.open){
+    const crop=document.querySelector('.crop-dialog[open]');
+    if(crop)crop.querySelector('[data-op=cancel]').click();
+    else{dismissingFromHistory=true;try{closeModal();}finally{dismissingFromHistory=false;}}
+    if(modal.open)history.pushState({archiveModal:true},'');
+    return;
+  }
+  const route=event.state;
+  if(route?.archivePage){
+    page=route.archivePage;filters={...archiveFilters(),...route.filters};chapterChild=route.chapterChild||'';
+    render();window.scrollTo(0,route.scroll||0);
+  }
+});
 let modalCleanup=()=>{},modalAction=null,toastTimer;
 const demoFiles=new Map(),urlCache=new Map(),modalUrls=[];
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -46,7 +67,9 @@ function inlineError(message){let box=modal.querySelector('.inline-error');if(!b
 const getFile=path=>demonstration?(demoFiles.has(path)?Promise.resolve(demoFiles.get(path)):Promise.reject(Error('Missing demo image'))):readFile(path);
 async function imageURL(path){
   if(urlCache.has(path))return urlCache.get(path);
-  const url=URL.createObjectURL(await getFile(path));urlCache.set(path,url);
+  const file=await getFile(path);
+  if(urlCache.has(path))return urlCache.get(path);
+  const url=URL.createObjectURL(file);urlCache.set(path,url);
   if(urlCache.size>90){const first=urlCache.keys().next().value;URL.revokeObjectURL(urlCache.get(first));urlCache.delete(first);}
   return url;
 }
@@ -54,16 +77,19 @@ function clearURLs(){for(const url of urlCache.values())URL.revokeObjectURL(url)
 function temporaryURL(blob){const url=URL.createObjectURL(blob);modalUrls.push(url);return url;}
 const imageObservers=new WeakMap();
 function hydrate(root=app){
+  if(root===app)layoutGallery(root.querySelector('.masonry'));
   imageObservers.get(root)?.disconnect();
   const load=async image=>{
-    try{const url=await imageURL(image.dataset.path);if(image.isConnected)image.src=url;}
+    image.dataset.visible='1';
+    try{const url=await imageURL(image.dataset.path);if(image.isConnected&&image.dataset.visible)image.src=url;}
     catch{if(image.isConnected)image.alt=t('imageError');}
   };
   const images=root.querySelectorAll('img[data-path]');
   if(typeof IntersectionObserver==='undefined'){images.forEach(load);return;}
   const observer=new IntersectionObserver(entries=>{
     for(const {target,isIntersecting} of entries){
-      if(isIntersecting){observer.unobserve(target);load(target);}
+      if(isIntersecting){if(!target.closest('.masonry'))observer.unobserve(target);load(target);}
+      else if(target.closest('.masonry')){delete target.dataset.visible;target.removeAttribute('src');}
     }
   },{rootMargin:'240px'});
   imageObservers.set(root,observer);
@@ -85,7 +111,14 @@ function closeModal(force=false){
   dirty=false;imageObservers.get(modal)?.disconnect();modal.close();modalCleanup();modalCleanup=()=>{};draftActive=false;modal.innerHTML='';modalAction=null;
   for(const url of modalUrls.splice(0))URL.revokeObjectURL(url);
 }
+modal.addEventListener('close',()=>{
+  if(!modal.open&&history.state?.archiveModal&&!dismissingFromHistory&&!consumingModalEntry){
+    // Consume the modal entry after an explicit close.
+    consumingModalEntry=true;history.back();
+  }
+});
 function showModal(content,{wide=false,narrow=false,action=null}={}){
+  if(!modal.open&&!history.state?.archiveModal){rememberRoute();history.pushState({archiveModal:true},'');}
   closeModal(true);modal.className=wide?'wide':narrow?'narrow':'';modal.innerHTML=content;modalAction=action;modal.showModal();
 }
 const modalHeader=title=>'<header class="modal-header"><h2>'+e(title)+'</h2>'+button('close',t('close'),'icon-button','close','aria-label="'+e(t('close'))+'"')+'</header>';
@@ -105,33 +138,51 @@ function render(){
   ({home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
   hydrate();
 }
-function dashboardView(){
-  const {children,works,albums,recent,periods}=dashboardData(state);
-  const noProfiles=children===0;
-  const stats=[['children',children,'familyChildren'],['works',works,'familyWorks'],['albums',albums,'familyAlbums']];
-  return `<div class="dashboard">
-    <header class="welcome-paper">
-      <h1>Little Archive</h1><p>${e(t(noProfiles?'welcomeFirst':'welcomeFamily'))}</p>
-      ${decoration('flower','welcome-flower')}
-      ${button(noProfiles?'newChild':'newWork',t(noProfiles?'addFirstChild':works?'addArtwork':'firstArtwork'),'primary','plus')}
-      ${noProfiles?button('demo',t('tryDemo'),'text-button','arrow'):''}
-    </header>
-    ${demoBanner()}${draftBanner()}
-    ${noProfiles?'':`<dl class="family-overview">${stats.map(([id,n,key])=>`<div data-stat="${id}"><dt>${e(t(key))}</dt><dd>${n}</dd></div>`).join('')}</dl>
-      ${periods.length?`<section class="dashboard-section"><h2>${e(t('ageCollections'))}</h2>
-        <div class="period-grid">${periods.map(([period,items])=>`<button type="button" class="period-card tone-${period%5}" data-action="openPeriod" data-period="${period}">
-          <span class="period-pictures">${items.slice(0,3).map(w=>thumb(w)).join('')}</span>
-          <strong>${e(periodText(period))}</strong><span>${e(countText(items.length))}</span></button>`).join('')}</div></section>`:''}
-      <section class="dashboard-section"><div class="section-heading"><h2>${e(t('recentMemories'))}</h2>
-        ${works?button('openArchive',t('viewAll'),'text-button','arrow'):''}</div>
-        ${works?`<div class="memory-grid">${recent.map(w=>`<button type="button" class="memory-card" data-action="detail" data-id="${e(w.id)}" aria-label="${e(w.title||t('untitled'))}">
-          ${thumb(w)}<span>${w.title?`<strong>${e(w.title)}</strong>`:''}<small>${childLabel(w.childId)} · ${e(dateText(w.artworkDate))}</small></span></button>`).join('')}</div>`:
-        `<p class="dashboard-empty">${e(t('emptyHint'))}</p>`}
-      </section>
-      <div class="dashboard-links">${button('openArchive',t('openArchive'),'secondary','grid')}${button('newAlbum',t('createAlbum'),'secondary','album')}</div>`}
-  </div>`;
+let chapterChild='', filtersExpanded=false;
+const memoryKey='little-archive-daily-memory';
+const selections=new Map();
+function memoryOfDay(){
+  const key=demonstration?'demo':memoryKey,day=today();
+  let previous=selections.get(key);
+  if(!demonstration){try{previous=JSON.parse(localStorage.getItem(key))||previous;}catch{}}
+  const work=dailyMemory(state.artworks,day,previous);
+  if(work&&(previous?.day!==day||previous.id!==work.id)){
+    const choice={day,id:work.id};
+    if(!demonstration){try{localStorage.setItem(key,JSON.stringify(choice));}catch{}}
+  }
+  if(work)selections.set(key,{day,id:work.id});
+  return work;
 }
-const thumb=w=>`<img loading="lazy" data-path="${e(coverPath(w))}" alt="">`;
+function displayTitle(work){return /\.(jpe?g|png|heic|heif|webp)$/i.test(work.title.trim())?'':work.title.trim();}
+function dashboardView(){
+  const child=state.children.find(c=>c.id===chapterChild)||state.children[0];
+  const memory=memoryOfDay(),title=memory&&displayTitle(memory);
+  return `<div class="dashboard"><header class="welcome-paper"><h1>Little Archive</h1>
+    <p>${e(t(child?'welcomeFamily':'welcomeFirst'))}</p>${decoration('flower','welcome-flower')}
+    ${button(child?'newWork':'newChild',t(child?'addDrawing':'addFirstChild'),'primary','plus')}
+    ${child?'':button('demo',t('tryDemo'),'text-button','arrow')}</header>
+    ${demoBanner()}${draftBanner()}
+    <section class="dashboard-section"><h2>${e(t('dailyMemory'))}</h2>
+    ${memory?`<button class="memory-card daily-card" data-action="detail" data-id="${e(memory.id)}">
+      <img decoding="async" data-path="${e(coverPath(memory))}" alt="">
+      <span>${title?`<strong>${e(title)}</strong>`:''}<small>${childLabel(memory.childId)}${validDate(memory.artworkDate)?' · '+e(dateText(memory.artworkDate)):''}</small>
+      ${memory.notes?`<span class="memory-note">${e(memory.notes)}</span>`:''}</span></button>`:
+      `<p class="dashboard-empty">${e(t('emptyHint'))}</p>`}</section>
+    ${child?`<section class="dashboard-section"><h2>${e(t('growingArt'))}</h2>
+      <label class="chapter-profile">${e(t('child'))} <select id="chapter-child">${state.children.map(c=>option(c.id,c.name,child.id)).join('')}</select></label>
+      <div class="period-grid">${chapters(state.artworks,child).map(([period,count])=>
+      `<button class="period-card tone-${period%5}" data-action="openPeriod" data-id="${e(child.id)}" data-period="${period}">
+      <strong>${e(periodText(period))}</strong><span>${e(countText(count))}</span></button>`).join('')||`<p class="dashboard-empty">${e(t('emptyChapters'))}</p>`}</div></section>`:''}</div>`;
+}
+function refreshDailyMemory(){
+  if(page==='home'&&app.querySelector('.dashboard')&&state.artworks.length&&selections.get(demonstration?'demo':memoryKey)?.day!==today())render();
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDailyMemory();});
+function scheduleMidnight(){
+  const now=new Date(),next=new Date(now);next.setHours(24,0,0,0);
+  setTimeout(()=>{refreshDailyMemory();scheduleMidnight();},next-now+100);
+}
+scheduleMidnight();
 function draftBanner(){return drafts.length&&!demonstration?'<div class="draft-banner">'+button('drafts',t('resumeDraft')+' · '+drafts.length,'secondary','edit')+'</div>':'';}
 function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('spark')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
 function hero(title,subtitle,action,label){return '<section class="hero hero-'+page+'"><div class="hero-copy"><div class="eyebrow">'+e(t(page==='albums'?'albumEyebrow':'collection'))+'</div><h1>'+e(title)+'</h1><p>'+e(subtitle)+'</p></div>'+decoration(page==='albums'?'book':'flower','hero-decoration')+(action?button(action,label,'primary','plus'):'')+'</section>';}
@@ -143,14 +194,19 @@ function archiveHero(){
     </div></section>`;
 }
 function option(value,label,selected){return '<option value="'+e(value)+'" '+(value===selected?'selected':'')+'>'+e(label)+'</option>';}
-function workCard(w){const category=displayCategory(workCategory(w));return '<article class="work-card tone-'+visualIndex(w.id,5)+'"><button class="work-open" data-action="detail" data-id="'+e(w.id)+'"><div class="art-frame"><img loading="lazy" data-path="'+e(coverPath(w))+'" alt="'+e(w.title||t('untitled'))+'"></div><div class="card-caption"><h3>'+e(w.title||t('untitled'))+'</h3><div class="card-meta">'+childLabel(w.childId,w.artworkDate)+'</div><div class="card-bottom"><time datetime="'+e(w.artworkDate)+'">'+e(dateText(w.artworkDate))+'</time>'+(category?'<span class="category-tag">'+e(t(category))+'</span>':'')+'</div></div></button>'+button('favorite','', 'icon-button fav '+(w.isFavorite?'selected':''),'heart','data-id="'+e(w.id)+'" aria-label="'+e(t(w.isFavorite?'unfavorite':'favorite'))+'" aria-pressed="'+w.isFavorite+'"')+'</article>';}
+function workCard(w){
+  const image=imagesById.get(w.coverImageId);
+  const label=[displayTitle(w)||t('untitled'),childLabel(w.childId),validDate(w.artworkDate)?dateText(w.artworkDate):''].filter(Boolean);
+  return `<article class="work-card" data-ratio="${image.height/image.width}"><button class="work-open" data-action="detail" data-id="${e(w.id)}" aria-label="${e(label[0])} · ${label[1]} ${e(label[2])}">
+    <img loading="lazy" decoding="async" width="${image.width}" height="${image.height}" data-path="${e(coverPath(w))}" alt=""></button></article>`;
+}
 function emptyView(title,message,action,label,symbol='frame'){return '<div class="empty empty-'+symbol+'">'+decoration(symbol,'empty-art')+'<h2>'+e(title)+'</h2><p>'+e(message)+'</p>'+button(action,label,'primary',action==='clear'?'arrow':'plus')+'</div>';}
 function hasArchiveFilters(){
   const defaults=archiveFilters();
   return Object.keys(defaults).some(key=>filters[key]!==defaults[key]);
 }
 function archiveResults(works){
-  if(works.length)return '<div class="art-grid">'+works.map(workCard).join('')+'</div>';
+  if(works.length)return '<div class="art-grid masonry">'+works.map(workCard).join('')+'</div>';
   if(state.artworks.length)return emptyView(t('noMatches'),t('noMatchesHint'),'clear',t('clearFilters'),'search');
   if(!state.children.length)return emptyView(t('empty'),t('welcomeFirst'),'newChild',t('addFirstChild'),'frame');
   return emptyView(t('empty'),t('emptyHint'),'newWork',t('firstArtwork'),'frame');
@@ -160,18 +216,20 @@ function archiveView(){
   const periods=new Set(dashboardData(state).periods.map(([period])=>period));
   if(filters.period!=='')periods.add(Number(filters.period));
   return archiveHero()+demoBanner()+draftBanner()+
-  '<div class="filter-row"><div class="segmented">'+button('all',t('all'),!filters.favorite?'active':'')+button('favorites',t('favorites'),filters.favorite?'active':'','heart')+'</div><span class="spacer"></span><div class="search">'+icon('search')+'<input id="search" value="'+e(filters.search)+'" aria-label="'+e(t('search'))+'" placeholder="'+e(t('search'))+'"></div><select id="year-filter" class="year-select" aria-label="'+e(t('anyYear'))+'">'+option('',t('anyYear'),filters.year)+years.map(y=>option(y,y,filters.year)).join('')+'</select></div>'+
-  '<div class="collection-label"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong><select id="sort" aria-label="'+e(t('newest'))+'" style="width:auto;border:0;background:none;padding:0;font-size:11px">'+[['newest','newest'],['oldest','oldest'],['age','byAge'],['category','byCategory']].map(([id,key])=>option(id,t(key),filters.sort)).join('')+'</select></div>'+
+  '<div class="archive-search"><div class="search">'+icon('search')+'<input id="search" value="'+e(filters.search)+'" aria-label="'+e(t('search'))+'" placeholder="'+e(t('search'))+'"></div></div>'+
+  '<details class="archive-options" '+(filtersExpanded?'open':'')+'><summary>'+icon('settings')+e(t('filters'))+'</summary><div class="filter-row"><div class="segmented">'+button('all',t('all'),!filters.favorite?'active':'')+button('favorites',t('favorites'),filters.favorite?'active':'','heart')+'</div><span class="spacer"></span><select id="year-filter" class="year-select" aria-label="'+e(t('anyYear'))+'">'+option('',t('anyYear'),filters.year)+years.map(y=>option(y,y,filters.year)).join('')+'</select></div>'+
+  '<div class="collection-label"><select id="sort" aria-label="'+e(t('newest'))+'" style="width:auto;border:0;background:none;padding:0;font-size:11px">'+[['newest','newest'],['oldest','oldest'],['age','byAge'],['category','byCategory']].map(([id,key])=>option(id,t(key),filters.sort)).join('')+'</select></div>'+
   '<div class="category-chips">'+button('category',t('anyCategory'),'chip '+(!filters.category?'active':''),'','data-category=""')+categories.map(c=>button('category',t(c),'chip '+(filters.category===c?'active':''),'','data-category="'+c+'"')).join('')+'</div>'+
   '<div class="age-filter-row"><select id="period-filter" aria-label="'+e(t('ageCollections'))+'">'+option('',t('allAges'),filters.period)+[...periods].sort((a,b)=>a-b).map(n=>option(String(n),periodText(n),filters.period)).join('')+'</select>'+
-  button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+'</div>'+
+  '</div></details>'+
+  '<div class="collection-label"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong>'+ button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+'</div>'+
   '<div id="archive-results">'+archiveResults(works)+'</div>';
 }
 function albumsView(){return hero(t('albumHeadline'),t('albumSubtitle'),'newAlbum',t('createAlbum'))+demoBanner()+(state.albums.length?'<div class="album-grid">'+state.albums.map(a=>{const theme=albumTheme(a.id);return '<button class="book-card" data-action="album" data-id="'+e(a.id)+'"><div class="album-cover theme-'+theme+'">'+coverDecoration(theme)+'<div class="book-imprint">Little Archive</div><h3>'+e(a.title)+'</h3><div class="book-owner">'+childLabel(a.childId)+'</div><div class="book-number">'+e(t('theme'+theme))+'</div></div><div class="book-caption"><span>'+e(countText(a.orderedArtworkIds.length))+'</span>'+icon('chevron')+'</div></button>';}).join('')+'</div>':emptyView(t('emptyAlbums'),t('emptyAlbumsHint'),'newAlbum',t('createAlbum'),'book'));}
 function settingsView(){return hero(t('settingsHeadline'),t('local'))+demoBanner()+'<div class="settings-grid"><section class="panel"><h2>'+icon('photo')+e(t('profiles'))+'</h2>'+state.children.map(c=>'<div class="profile-row"><span class="child-dot" style="background:'+e(c.color)+'40">'+e(c.name[0])+'</span><div>'+e(c.name)+(c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':'')+'</div>'+button('editChild',t('edit'),'text-button','','data-id="'+e(c.id)+'"')+'</div>').join('')+button('newChild',t('addChild'),'secondary','plus')+'</section>'+
   '<section class="panel"><h2>'+icon('download')+e(t('backup'))+'</h2><p>'+e(t('backupHint'))+'</p><div class="buttons">'+button('export',t('exportBackup'),'secondary','download')+button('import',t('importBackup'),'secondary','upload')+'</div><p class="warning">'+e(t('backupWarning'))+'</p></section>'+
   '<section class="panel"><h2>'+icon('lock')+e(t('privacyTitle'))+'</h2><p>'+e(t('privacyBody'))+'</p><p class="web-note">'+e(t('webNote'))+'</p></section><section class="panel"><h2>'+e(t('language'))+'</h2><div class="buttons">'+button('language','Русский',lang==='ru'?'primary':'secondary','','data-language="ru"')+button('language','English',lang==='en'?'primary':'secondary','','data-language="en"')+'</div></section></div>';}
-function openArchive(period=''){clearTimeout(searchTimer);filters={...archiveFilters(),period};page='archive';render();window.scrollTo(0,0);}
+function openArchive(period='',child=''){clearTimeout(searchTimer);filters={...archiveFilters(),period,child};page='archive';render();window.scrollTo(0,0);}
 async function enterOwn(){demonstration=false;state=realState;page='home';filters=archiveFilters();clearURLs();render();if(!state.children.length)profileEditor();}
 
 function profileEditor(id){
@@ -432,9 +490,9 @@ app.onclick=async event=>{
   try{
     if(busy)return;
     const action=el.dataset.action;
-    if(action==='nav'){if(el.dataset.page==='archive')openArchive();else{page=el.dataset.page;render();window.scrollTo(0,0);}}
+    if(action==='nav'&&page!==el.dataset.page){rememberRoute();page=el.dataset.page;render();window.scrollTo(0,0);pushRoute();}
     if(action==='openArchive')openArchive();
-    if(action==='openPeriod')openArchive(el.dataset.period);
+    if(action==='openPeriod'){rememberRoute();openArchive(el.dataset.period,el.dataset.id);pushRoute();}
     if(action==='language'){setLanguage(el.dataset.language);render();}
     if(action==='filterChild'){filters.child=el.dataset.id;page='archive';render();}
     if(action==='all'||action==='favorites'){filters.favorite=action==='favorites';render();}
@@ -458,7 +516,8 @@ app.onclick=async event=>{
     if(action==='import')backupInput.click();
   }catch{toast(stale?t('syncNotice'):t('error'));}
 };
-app.onchange=event=>{const map={'year-filter':'year','period-filter':'period','sort':'sort'};if(map[event.target.id]){filters[map[event.target.id]]=event.target.value;render();}};
+app.addEventListener('toggle',event=>{if(event.target.matches('.archive-options')&&event.target.isConnected)filtersExpanded=event.target.open;},true);
+app.onchange=event=>{if(event.target.id==='chapter-child'){chapterChild=event.target.value;render();return;}const map={'year-filter':'year','period-filter':'period','sort':'sort'};if(map[event.target.id]){filters[map[event.target.id]]=event.target.value;render();}};
 let searchTimer;
 app.oninput=event=>{
   if(event.target.id!=='search')return;

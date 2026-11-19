@@ -113,6 +113,7 @@ async function run(){
   // encounters the missing additional original.
   const frame=appFrame();
   await waitFor(()=>frame.contentDocument?.querySelector('[data-action=drafts]'));
+  frame.contentDocument.querySelector('.mobile-nav [data-page=archive]').click();
   (await waitFor(()=>frame.contentDocument?.querySelector('[data-action=detail][data-id=work-0]'))).click();
   (await waitFor(()=>frame.contentDocument?.querySelector('[data-action=edit]'))).click();
   const save=await waitFor(()=>frame.contentDocument?.querySelector('#artwork-form [data-action=submit]:disabled'));
@@ -177,8 +178,14 @@ async function checkPhaseTwo(db,photo,expected){
     input.dispatchEvent(new Event('input',{bubbles:true}));
     input.dispatchEvent(new Event('change',{bubbles:true}));
   };
-  await waitFor(()=>query('.dashboard [data-stat=children] dd'));
-  equal([...doc().querySelectorAll('.family-overview dd')].map(el=>el.textContent),['2','2','1'],'Dashboard family counts are wrong');
+  const memory=await waitFor(()=>query('.daily-card'));
+  assert(doc().querySelectorAll('.daily-card').length===1&&!query('.family-overview'),'Home duplicates gallery');
+  await click('.daily-card');
+  await waitFor(()=>query('#detail-image'));
+  await click('#modal [data-action=close]');
+  await nav('archive');await nav('home');
+  assert(query('.daily-card').dataset.id===memory.dataset.id,'Daily selection changed across tabs');
+  value(query('#chapter-child'),'misha');
   assert(query('.mobile-nav [aria-current=page]').dataset.page==='home','Initial tab was not Home');
   assert(doc().documentElement.scrollWidth<=390,'Dashboard overflows a 390px viewport');
   await click('[data-action=openPeriod][data-period="3"]');
@@ -186,11 +193,13 @@ async function checkPhaseTwo(db,photo,expected){
   equal([...doc().querySelectorAll('.art-grid [data-action=detail]')].map(el=>el.dataset.id),['work-1'],'Age period returned the wrong works');
   await click('.child-tabs [data-id=aurora]');
   assert(query('#period-filter').value==='3'&&!query('.art-grid .work-card'),'Choosing a child reset the age filter');
-  await nav('archive');
+  await nav('home');await nav('archive');
+  assert(query('#period-filter').value==='3'&&query('.child-tabs [data-id=aurora]').getAttribute('aria-pressed')==='true','Nav lost active filters');
+  await click('.archive-reset');
   assert(query('.child-tabs [data-id=""]').getAttribute('aria-pressed')==='true','Archive nav did not default to All children');
   assert(doc().querySelectorAll('.art-grid .work-card').length===2,'Family archive omitted a child');
   assert(doc().documentElement.scrollWidth<=390,'Archive overflows a 390px viewport');
-  passed.push('Dashboard opens first, counts both children and routes age collections into combined family filters');
+  passed.push('Home opens a stable memory, switches child chapters and retains combined Archive filters');
 
   await click('.art-grid [data-id=work-0][data-action=detail]');
   await click('#modal [data-action=edit]');

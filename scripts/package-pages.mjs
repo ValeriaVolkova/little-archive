@@ -10,7 +10,7 @@ import {runInNewContext} from 'node:vm';
 const allowedFiles=[
   'index.html','manifest.webmanifest','style.css','editorial.css','sw.js',
   'app.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
-  'vendor/heic-to.js','vendor/heic-to.LICENSE.txt','crop-editor.js','media.js','pdf.js','storage-codec.js','storage-error.js','ui.js','zip.js',
+  'vendor/heic-to.js','vendor/heic-to.LICENSE.txt','crop-editor.js','scrapbook.js','media.js','pdf.js','storage-codec.js','storage-error.js','ui.js','zip.js',
   'assets/background-doodles.svg','assets/fish.svg','assets/flowers.svg',
   'assets/house.svg','assets/icon.svg','assets/leaf.svg','assets/rainbow.svg',
   'assets/sun.svg','assets/fonts/Nunito.ttf','assets/fonts/OFL.txt',

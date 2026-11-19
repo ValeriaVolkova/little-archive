@@ -48,13 +48,13 @@ async function snapshot(){
 async function run(){
   const old=openFrame();
   await click(old,'.welcome-paper [data-action=newChild]');
-  const profile=await waitFor(()=>query(old,'#profile-form'),'Phase 2 profile form');
+  const profile=await waitFor(()=>query(old,'#profile-form'),'f8e460d profile form');
   fill(old,profile.elements.name,'Профиль до обновления');
   fill(old,profile.elements.birthday,'2020-04-18');
   await click(old,'#profile-form [data-action=submit]');
   await waitFor(()=>!query(old,'#profile-form'),'profile saved');
   await click(old,'[data-action=newWork]');
-  const form=await waitFor(()=>query(old,'#artwork-form'),'Phase 2 artwork editor');
+  const form=await waitFor(()=>query(old,'#artwork-form'),'f8e460d artwork editor');
   fill(old,form.elements.title,'Рисунок до обновления');
   const canvas=document.createElement('canvas');
   canvas.width=24;canvas.height=30;
@@ -65,39 +65,38 @@ async function run(){
   transfer.items.add(new old.contentWindow.File([original],'synthetic.png',{type:'image/png'}));
   const file=form.querySelector('#files');
   file.files=transfer.files;file.dispatchEvent(new old.contentWindow.Event('change',{bubbles:true}));
-  await waitFor(()=>query(old,'#photo-list img'),'Phase 2 photo preview');
+  await waitFor(()=>query(old,'#photo-list img'),'f8e460d photo preview');
+  await click(old,'.crop-dialog [data-op=skip]');
   await click(old,'#artwork-form [data-action=submit]');
-  await waitFor(()=>query(old,'.work-card'),'Phase 2 saved artwork');
+  await waitFor(()=>query(old,'.work-card'),'f8e460d saved artwork');
   await click(old,'.top-actions [data-language=en]');
   const before=await snapshot();
   const originalBytes=[...new Uint8Array(await original.arrayBuffer())];
-  assert(before.archive?.children.length===1&&before.archive.artworks.length===1,'Phase 2 records were not persisted');
+  assert(before.archive?.children.length===1&&before.archive.artworks.length===1,'f8e460d records were not persisted');
   assert(before.bytes.some(data=>JSON.stringify(data)===JSON.stringify(originalBytes)),'Original was not kept');
 
   await old.contentWindow.navigator.serviceWorker.ready;
   const registration=await navigator.serviceWorker.getRegistration(scope);
   const previousCache=(await caches.keys()).find(key=>key.startsWith('little-archive-pages-shell:'));
   const oldCache=await caches.open(previousCache);
-  assert(!(await (await oldCache.match(scope+'app.js')).text()).includes('import {editCrop}'),'Initial cache is not Phase 2');
+  assert(!(await oldCache.match(scope+'scrapbook.js')) && await oldCache.match(scope+'crop-editor.js'),'Initial cache is not f8e460d');
   const controlled=openFrame();
   await click(controlled,'.mobile-nav [data-page=archive]');
-  await waitFor(()=>query(controlled,'.work-card'),'Phase 2 archive after reopen');
-  assert(registration.active?.state==='activated','Phase 2 worker was not activated');
-  assert((await controlled.contentWindow.navigator.serviceWorker.getRegistration())?.scope===registration.scope,'Phase 2 registration scope changed');
+  await waitFor(()=>query(controlled,'.work-card'),'f8e460d archive after reopen');
+  assert(registration.active?.state==='activated','f8e460d worker was not activated');
+  assert((await controlled.contentWindow.navigator.serviceWorker.getRegistration())?.scope===registration.scope,'f8e460d registration scope changed');
   assert((await fetch('/publish-test-update',{method:'POST'})).ok,'Test deployment switch failed');
   await registration.update();
-  const waiting=await waitFor(()=>registration.waiting,'Crop release worker waits while old clients are open');
+  const waiting=await waitFor(()=>registration.waiting,'Phase 3A worker waits while old clients are open');
   assert(query(controlled,'.work-card')&&!query(controlled,'.dashboard'),'Old worker served a mixed UI before activation');
   old.remove();controlled.remove();
   await waitFor(async()=>{
     const current=await navigator.serviceWorker.getRegistration(scope);
     return current?.active?.state==='activated'&&!current.waiting&&!(await caches.keys()).includes(previousCache);
-  },'Crop release worker activation after closing old tabs');
+  },'Phase 3A worker activation after closing old tabs');
 
   const updated=openFrame();
-  await waitFor(()=>query(updated,'.dashboard [data-stat=children] dd'),'Crop release Dashboard');
-  assert(query(updated,'.dashboard [data-stat=children] dd').textContent==='1','Profile missing from Dashboard');
-  assert(query(updated,'.dashboard [data-stat=works] dd').textContent==='1','Artwork missing from Dashboard');
+  await waitFor(()=>query(updated,'.daily-card'),'Scrapbook after update');
   assert(query(updated,'.memory-card strong').textContent==='Рисунок до обновления','Recent artwork title missing');
   assert((await caches.keys()).length>0,'Missing app shell');
   const activeCache=(await caches.keys()).find(key=>key.startsWith('little-archive-pages-shell:'));
@@ -105,11 +104,11 @@ async function run(){
   await click(updated,'.mobile-nav [data-page=archive]');
   assert(query(updated,'.child-tabs').textContent.includes('Профиль до обновления'),'Existing profile missing from Archive');
   const artwork=await waitFor(()=>query(updated,'.work-card img')?.naturalWidth>0&&query(updated,'.work-card'),'Archive poster image');
-  assert(artwork.textContent.includes('Рисунок до обновления'),'Archive omitted existing artwork');
+  assert(artwork.querySelector('button').getAttribute('aria-label').includes('Рисунок до обновления'),'Archive omitted existing artwork');
   const after=await snapshot();
   assert(JSON.stringify(after)===JSON.stringify(before),'Upgrade rewrote metadata or image bytes');
   assert(localStorage.getItem('little-archive-language')==='en','Upgrade reset language preference');
-  passed.push('Phase 2 full UI save → same-origin Pages update with waiting/activation → Crop release Dashboard and Archive show unchanged original and profile');
+  passed.push('f8e460d full UI save → same-origin Pages update with waiting/activation → Phase 3A Dashboard and Archive show unchanged original and profile');
   await fetch('/result',{method:'POST',body:JSON.stringify({passed})});
 }
 run().catch(error=>fetch('/result',{method:'POST',body:JSON.stringify({error:error.stack||String(error)})}));
