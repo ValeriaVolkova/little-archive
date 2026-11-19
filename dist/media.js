@@ -19,13 +19,46 @@ export async function loadImage(blob){
     return nativeImage(await heicTo({blob,type:'image/png'}));
   }
 }
-export async function raster(blob,max=1600,rotation=0,crop=null){
+// Lift light paper more than dark strokes. The smooth shoulder leaves room
+// between pale pencil marks and white; adding equally to RGB retains hue.
+const paperLift=Uint8Array.from({length:256},(_,value)=>{
+  const light=value/255;
+  return Math.round(190*light**3*(1-light));
+});
+function brightenPaper(ctx){
+  const {width,height}=ctx.canvas;
+  // Limit temporary pixel memory even for a large image being shared.
+  for(let y=0;y<height;y+=128){
+    const strip=ctx.getImageData(0,y,width,Math.min(128,height-y));
+    const pixels=strip.data;
+    for(let i=0;i<pixels.length;i+=4){
+      const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
+      const high=Math.max(r,g,b),chroma=high-Math.min(r,g,b);
+      const light=(54*r+183*g+19*b)>>8;
+      const lift=Math.min(255-high,Math.round(paperLift[light]*Math.max(0,1-chroma/96)));
+      pixels[i]+=lift;pixels[i+1]+=lift;pixels[i+2]+=lift;
+    }
+    ctx.putImageData(strip,0,y);
+  }
+}
+export function enhancedPreview(image,max){
+  const scale=Math.min(1,max/Math.max(image.naturalWidth,image.naturalHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
+  canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  ctx.drawImage(image,0,0,canvas.width,canvas.height);
+  brightenPaper(ctx);
+  return canvas;
+}
+export async function raster(blob,max=1600,rotation=0,crop=null,enhance=false){
   const image=blob instanceof HTMLImageElement?blob:await loadImage(blob),sw=crop?crop.w*image.naturalWidth:image.naturalWidth,sh=crop?crop.h*image.naturalHeight:image.naturalHeight;
   const scale=Math.min(1,max/Math.max(sw,sh)),w=Math.max(1,Math.round(sw*scale)),h=Math.max(1,Math.round(sh*scale)),canvas=document.createElement('canvas');
   const sideways=Math.abs(rotation%180)===90;canvas.width=sideways?h:w;canvas.height=sideways?w:h;
   const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(rotation*Math.PI/180);
   if(crop)ctx.drawImage(image,crop.x*image.naturalWidth,crop.y*image.naturalHeight,sw,sh,-w/2,-h/2,w,h);else ctx.drawImage(image,-w/2,-h/2,w,h);
   try{
+    if(enhance)brightenPaper(ctx);
     const result=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Cannot encode image')),'image/jpeg',0.92));
     return {blob:result,width:canvas.width,height:canvas.height};
   }finally{canvas.width=canvas.height=0;}

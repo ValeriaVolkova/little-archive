@@ -25,6 +25,7 @@ test('every catalog entry has three translations and the official name is consis
   assert.equal(t('tagline'),'Pequeños dibujos. Grandes recuerdos.');
   assert.equal(t('tagline','ru'),'Маленькие рисунки. Большие воспоминания.');
   assert.equal(t('tagline','en'),'Little art. Big memories.');
+  assert.deepEqual(['ru','en','es'].map(language=>t('enhance',language)),['✨ Улучшить','✨ Enhance','✨ Mejorar']);
 });
 
 test('Spanish supports regional defaults, dates and counts with a switch to saved English or Russian',()=>{

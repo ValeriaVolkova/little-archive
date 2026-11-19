@@ -1,4 +1,4 @@
-import {loadImage} from './media.js';
+import {enhancedPreview,loadImage} from './media.js';
 import {appName,t,dateText} from './i18n.js';
 function textLines(ctx,text,x,y,width,lineHeight,maxLines=4){
   const words=text.split(/\s+/);let line='',lines=[];
@@ -24,7 +24,9 @@ export async function createPDF(archive,album,getFile,showCaptions,onProgress){
     }else{
       const work=works[pageIndex-1],meta=archive.images.find(i=>i.id===work.coverImageId),img=await loadImage(await getFile(meta.editedPath||meta.originalPath));
       const maxW=1454,maxH=showCaptions?1840:2099,scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight),w=img.naturalWidth*scale,h=img.naturalHeight*scale;
-      ctx.drawImage(img,(1654-w)/2,120+(maxH-h)/2,w,h);
+      const enhanced=meta.autoEnhance===true?enhancedPreview(img,Math.ceil(Math.max(w,h))):null;
+      ctx.drawImage(enhanced||img,(1654-w)/2,120+(maxH-h)/2,w,h);
+      if(enhanced)enhanced.width=enhanced.height=0;
       if(img.naturalWidth/(w/200)<150||img.naturalHeight/(h/200)<150)lowResolution++;
       if(showCaptions){ctx.font='500 36px sans-serif';textLines(ctx,work.title||t('untitled'),100,2050,1454,48,2);ctx.font='26px sans-serif';ctx.fillStyle='#65645D';ctx.fillText(dateText(work.artworkDate),100,2180);}
       ctx.textAlign='right';ctx.font='20px sans-serif';ctx.fillStyle='#89877F';ctx.fillText(String(pageIndex),1554,2270);

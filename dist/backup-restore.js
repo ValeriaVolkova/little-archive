@@ -43,7 +43,7 @@ export async function inspectBackup(file,onProgress=()=>{}){
       verifiedFiles.set(path,typed);
     }
     const display=verifiedFiles.get(image.editedPath||image.originalPath);
-    verifiedFiles.set(image.originalPath+'.thumb',(await raster(display,640)).blob);
+    verifiedFiles.set(image.originalPath+'.thumb',(await raster(display,640,0,null,image.autoEnhance===true)).blob);
     onProgress(++done,incoming.images.length);
   }
   return {incoming,verifiedFiles};

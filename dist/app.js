@@ -453,15 +453,20 @@ async function artworkEditor(id,recovered=null){
   }
   async function openCrop(p,onCancel,preview){
     const source=preview||await loadImage(p.original);
-    editCrop(source,p.cropSettings,!!p.edited&&!p.cropSettings,t,async recipe=>{
-      const full=recipe.rotation===0&&recipe.x<1e-9&&recipe.y<1e-9&&recipe.w>1-1e-9&&recipe.h>1-1e-9;
-      if(full&&!p.edited)return;
-      const result=full?null:await raster(source,4096,recipe.rotation,recipe);
-      const thumb=(await raster(result?.blob||source,640)).blob;
-      Object.assign(p,{edited:result?.blob||null,thumb,width:result?.width||source.naturalWidth,
-        height:result?.height||source.naturalHeight,cropSettings:full?null:recipe,changed:true});
+    const legacyImage=p.edited&&!p.cropSettings?await loadImage(p.edited):null;
+    editCrop(source,p.cropSettings,legacyImage,t,async (recipe,cropChanged,enhanced)=>{
+      let cropUpdate={};
+      if(cropChanged){
+        const full=recipe.rotation===0&&recipe.x<1e-9&&recipe.y<1e-9&&recipe.w>1-1e-9&&recipe.h>1-1e-9;
+        const result=full?null:await raster(source,4096,recipe.rotation,recipe);
+        cropUpdate={edited:result?.blob||null,width:result?.width||source.naturalWidth,
+          height:result?.height||source.naturalHeight,cropSettings:full?null:recipe,changed:true};
+      }
+      const base=(cropChanged?cropUpdate.edited:p.edited)||source;
+      const thumb=(await raster(base,640,0,null,enhanced)).blob;
+      Object.assign(p,cropUpdate,{thumb,autoEnhance:enhanced,generatedThumb:true});
       dirty=true;paintPhotos();
-    },onCancel);
+    },onCancel,p.autoEnhance===true);
   }
   if(originalWork){
     busy=true;
@@ -470,8 +475,9 @@ async function artworkEditor(id,recovered=null){
       for(const meta of state.images.filter(i=>i.artworkId===id).sort((a,b)=>a.sortOrder-b.sortOrder)){
         const original=await getFile(meta.originalPath),edited=meta.editedPath?await getFile(meta.editedPath):null;
         let generatedThumb=false;
-        const thumb=await getFile(meta.originalPath+'.thumb').catch(async()=>{generatedThumb=true;return (await raster(edited||original,640)).blob;});
-        loaded.push({id:meta.id,original,edited,width:meta.width,height:meta.height,thumb,meta,cropSettings:meta.cropSettings,generatedThumb});
+        const autoEnhance=meta.autoEnhance===true;
+        const thumb=await getFile(meta.originalPath+'.thumb').catch(async()=>{generatedThumb=true;return (await raster(edited||original,640,0,null,autoEnhance)).blob;});
+        loaded.push({id:meta.id,original,edited,width:meta.width,height:meta.height,thumb,meta,cropSettings:meta.cropSettings,generatedThumb,autoEnhance});
       }
       photos=loaded;photosReady=true;paintPhotos();
     }catch{form.querySelector('[data-action=submit]').disabled=true;inlineError(t('editPhotosUnavailable'));}finally{busy=false;}
@@ -497,7 +503,10 @@ async function artworkEditor(id,recovered=null){
         if(p.edited&&(!p.meta||p.changed))puts.push([editedPath,p.edited]);
         if(p.meta?.editedPath&&p.meta.editedPath!==editedPath)deletes.push(p.meta.editedPath);
         if(!p.meta||p.changed||p.generatedThumb)puts.push([originalPath+'.thumb',p.thumb]);
-        next.images.push({...p.meta,id:p.id,artworkId,originalPath,editedPath,...(p.changed||p.cropSettings?{cropSettings:p.cropSettings??null}:{}),width:p.width,height:p.height,sortOrder:p.meta?.sortOrder??order});
+        const image={...p.meta,id:p.id,artworkId,originalPath,editedPath,...(p.changed||p.cropSettings?{cropSettings:p.cropSettings??null}:{}),width:p.width,height:p.height,sortOrder:p.meta?.sortOrder??order};
+        if(p.autoEnhance===true)image.autoEnhance=true;
+        else delete image.autoEnhance;
+        next.images.push(image);
       }
       next.albums=next.albums.map(a=>a.childId&&a.childId!==record.childId?albumMembers(a,a.orderedArtworkIds.filter(x=>x!==artworkId)):a);
       await persist(next,puts,deletes,!id&&!demonstration?{id:draftId,revision:draftRevision}:null);
@@ -524,13 +533,17 @@ async function artworkDetail(id,index=0){
       if(action==='delete'){showModal(modalHeader(t('deleteTitle'))+'<div class="modal-body"><p class="help">'+e(t('deleteHint'))+'</p></div><div class="modal-footer">'+button('close',t('cancel'))+button('confirmDelete',t('delete'),'danger')+'</div>',{narrow:true,action:async a=>{if(a!=='confirmDelete'||busy)return;busy=true;try{const paths=photos.flatMap(p=>[p.originalPath,p.originalPath+'.thumb',...(p.editedPath?[p.editedPath]:[])]);await persist(deleteWork(state,id),[],paths);busy=false;closeModal(true);render();toast(t('deleted'));}catch{inlineError(t('saveError'));}finally{busy=false;}}});}
       if(action==='addAlbum')addToAlbum(id);
       if(action==='share'){
-        const blob=await getFile(photo.editedPath||photo.originalPath),file=new File([blob],(work.title||t('untitled')).replace(/[\\/:*?"<>|]/g,'-')+'.'+(photo.editedPath||photo.originalPath).split('.').at(-1),{type:blob.type||'image/jpeg'});
+        const path=photo.editedPath||photo.originalPath,source=await getFile(path);
+        const enhanced=photo.autoEnhance===true;
+        const blob=enhanced?(await raster(source,4096,0,null,true)).blob:source;
+        const extension=enhanced?'jpg':path.split('.').at(-1);
+        const file=new File([blob],(work.title||t('untitled')).replace(/[\\/:*?"<>|]/g,'-')+'.'+extension,{type:blob.type||'image/jpeg'});
         if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:work.title});}catch(error){if(error.name!=='AbortError')download(file,file.name);}}else download(file,file.name);
       }
     }});
   modal.classList.add('artwork-dialog');
   const img=modal.querySelector('#detail-image');
-  try{img.src=temporaryURL((await raster(await getFile(photo.editedPath||photo.originalPath),2200)).blob);}catch{img.alt=t('imageError');}
+  try{img.src=temporaryURL((await raster(await getFile(photo.editedPath||photo.originalPath),2200,0,null,photo.autoEnhance===true)).blob);}catch{img.alt=t('imageError');}
   const zoom=()=>img.classList.toggle('zoomed');img.onclick=zoom;img.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();zoom();}};
   let touchX=0;img.ontouchstart=event=>touchX=event.touches[0].clientX;img.ontouchend=event=>{const delta=event.changedTouches[0].clientX-touchX;if(Math.abs(delta)>70&&photos.length>1)artworkDetail(id,(index+(delta>0?-1:1)+photos.length)%photos.length);};
 }

@@ -42,10 +42,10 @@ async function waitFor(find){
   }
   throw Error('Application did not reach the expected state');
 }
-const makeImage=(type,width=20,height=32)=>{
+const makeImage=(type,width=20,height=32,color='#E96345')=>{
   const canvas=document.createElement('canvas');
   canvas.width=width;canvas.height=height;
-  const ctx=canvas.getContext('2d');ctx.fillStyle='#E96345';ctx.fillRect(0,0,width,height);
+  const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,width,height);
   return new Promise(resolve=>canvas.toBlob(resolve,type));
 };
 const appFrame=()=>{
@@ -251,7 +251,7 @@ async function checkPhaseTwo(db,photo,expected){
   choose(photo,'first.png');
   await click('.crop-dialog [data-op=skip]');
   const preview=await waitFor(()=>form.querySelector('#photo-list img')?.src);
-  const jpeg=await makeImage('image/jpeg');
+  const jpeg=await makeImage('image/jpeg',20,32,'#bbbbbb');
   // JPEG DateTimeOriginal with a different date, injected into a real image.
   const exif=new Uint8Array(74),view=new DataView(exif.buffer),at=10;
   view.setUint16(0,0xffe1);view.setUint16(2,72);exif.set([69,120,105,102,0,0],4);
@@ -268,6 +268,15 @@ async function checkPhaseTwo(db,photo,expected){
   await waitFor(()=>form.querySelector('#photo-list img')?.src!==preview);
   await click('.crop-dialog [data-op=in]');
   await click('.crop-dialog [data-op=rotate]');
+  const toggle='.crop-dialog [data-op=enhance]';
+  const centerPixel=canvas=>canvas.getContext('2d').getImageData(Math.floor(canvas.width/2),Math.floor(canvas.height/2),1,1).data[0];
+  const previewPixel=()=>centerPixel(query('.crop-dialog canvas'));
+  const unenhanced=previewPixel();
+  await click(toggle);
+  assert(query(toggle).getAttribute('aria-pressed')==='true'&&previewPixel()>unenhanced+8,'Enhance did not immediately lighten paper');
+  await click(toggle);
+  assert(previewPixel()===unenhanced,'Disabling enhancement did not restore preview pixels');
+  await click(toggle);
   await click('.crop-dialog [data-op=done]');
   await waitFor(()=>!query('.crop-dialog'));
   await click('#photo-list [data-action=crop]');
@@ -293,8 +302,10 @@ async function checkPhaseTwo(db,photo,expected){
   const newBackup=await inspectBackup(await createBackup(added,readFile));
   assert(newBackup.incoming.artworks.find(w=>w.id===newWork.id).uncategorized===true,'ZIP lost the optional-category flag');
   const cropped=newPhotos[0];
+  assert(cropped.autoEnhance===true,'Saved photo lost its enhancement');
   assert(cropped.cropSettings.rotation===90&&cropped.width===26&&cropped.height===16,'Wrong landscape dimensions or saved recipe');
   const restored=newBackup.incoming.images.find(i=>i.id===cropped.id);
+  assert(restored.autoEnhance===true,'ZIP lost enhancement');
   equal(restored.cropSettings,cropped.cropSettings,'ZIP lost crop settings');
   equal(await bytes(newBackup.verifiedFiles.get(cropped.editedPath)),await bytes(await readFile(cropped.editedPath)),'ZIP lost edited pixels');
   const card=query('.art-grid [data-id="'+newWork.id+'"] img')||query('.art-grid [data-id="'+newWork.id+'"]').closest('.work-card').querySelector('img');
@@ -302,6 +313,20 @@ async function checkPhaseTwo(db,photo,expected){
   await click('.art-grid [data-action=detail][data-id="'+newWork.id+'"]');
   await click('#modal [data-action=edit]');
   await click('#photo-list [data-action=crop]');
+  assert((await waitFor(()=>query(toggle))).getAttribute('aria-pressed')==='true','Reopened crop lost enhancement');
+  await click(toggle);
+  await click('.crop-dialog [data-op=done]');
+  await waitFor(()=>!query('.crop-dialog'));
+  await click('#artwork-form [data-action=submit]');
+  await waitFor(()=>!query('#artwork-form'));
+  const disabled=(await readArchive()).images.find(i=>i.id===cropped.id);
+  assert(!disabled.autoEnhance,'Disabled enhancement was not saved');
+  equal(disabled.cropSettings,cropped.cropSettings,'Switching off enhancement changed framing');
+  equal(await bytes(await readFile(disabled.editedPath)),await bytes(newBackup.verifiedFiles.get(cropped.editedPath)),'Toggle recompressed cropped image');
+  await click('.art-grid [data-action=detail][data-id="'+newWork.id+'"]');
+  await click('#modal [data-action=edit]');
+  await click('#photo-list [data-action=crop]');
+  assert((await waitFor(()=>query(toggle))).getAttribute('aria-pressed')==='false','Persisted off state was not restored');
   await click('.crop-dialog [data-op=reset]');
   await click('.crop-dialog [data-op=done]');
   await waitFor(()=>!query('.crop-dialog'));
@@ -310,6 +335,21 @@ async function checkPhaseTwo(db,photo,expected){
   const reset=(await readArchive()).images.find(i=>i.id===cropped.id);
   assert(!reset.editedPath&&!reset.cropSettings&&reset.width===20&&reset.height===32,'Reopened crop did not restore original framing');
   equal(await bytes(await readFile(reset.originalPath)),await bytes(replacement),'Reset changed original bytes');
+  // Enhance an original with no crop, then discard a later change.
+  await click('.art-grid [data-action=detail][data-id="'+newWork.id+'"]');
+  await click('#modal [data-action=edit]');await click('#photo-list [data-action=crop]');
+  await click(toggle);await click('.crop-dialog [data-op=done]');
+  await waitFor(()=>!query('.crop-dialog'));await click('#artwork-form [data-action=submit]');
+  await waitFor(()=>!query('#artwork-form'));
+  const plain=(await readArchive()).images.find(i=>i.id===cropped.id);
+  assert(plain.autoEnhance&&!plain.editedPath&&!plain.cropSettings,'Full-frame enhancement required a crop or extra image file');
+  await click('.art-grid [data-action=detail][data-id="'+newWork.id+'"]');
+  await click('#modal [data-action=edit]');await click('#photo-list [data-action=crop]');
+  await click(toggle);await click('.crop-dialog [data-op=cancel]');
+  await waitFor(()=>!query('.crop-dialog'));await click('#artwork-form [data-action=submit]');
+  await waitFor(()=>!query('#artwork-form'));
+  assert((await readArchive()).images.find(i=>i.id===plain.id).autoEnhance,'Cancel committed a changed enhancement');
+  passed.push('One-button enhancement previews immediately, toggles off exactly and survives save/reopen without changing crop bytes');
   passed.push('Square HEIC, portrait PNG and JPEG crop, landscape thumbnail, cancellation, ZIP recipe and re-edit from original');
   passed.push('Quick Add replaces the preview, preserves a manual date against EXIF, and saves exactly one original');
 
@@ -324,6 +364,25 @@ async function checkPhaseTwo(db,photo,expected){
   const pdf=await createPDF(restorePlan.archive,{...added.albums[0],childId:newWork.childId,orderedArtworkIds:[newWork.id]},
     path=>{assert(path===cropped.editedPath,'PDF used uncropped original');return restoredFiles.get(path);},true,()=>{});
   const parsed=await window.PDFLib.PDFDocument.load(await pdf.blob.arrayBuffer());
+  const {loadImage,enhancedPreview}=await import(base+'media.js');
+  const swatches=document.createElement('canvas');swatches.width=6;swatches.height=1;
+  const paint=swatches.getContext('2d');
+  ['#111111','#bbbbbb','#e6e6e6','#f5f5f5','#ffffff','#d02036'].forEach((color,x)=>{
+    paint.fillStyle=color;paint.fillRect(x,0,1,1);
+  });
+  const chart=await loadImage(await new Promise(resolve=>swatches.toBlob(resolve)));
+  const samples=enhancedPreview(chart,6).getContext('2d').getImageData(0,0,6,1).data;
+  assert(samples[0]===17&&samples[4]>187&&samples[8]<samples[12]&&samples[12]<samples[16],'Enhancement flattened shadows or pale pencil marks');
+  equal([...samples.slice(20,23)],[208,32,54],'Enhancement washed out saturated pigment');
+  passed.push('Local tone curve lifts paper while retaining dark ink, pale strokes and saturated pigment');
+  async function pixelIn(blob){
+    const image=await loadImage(blob),canvas=document.createElement('canvas');
+    canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+    canvas.getContext('2d').drawImage(image,0,0);
+    return centerPixel(canvas);
+  }
+  assert(await pixelIn(pdf.previews[1])>unenhanced+8,'PDF omitted the enhancement');
+  assert(await pixelIn(restoredFiles.get(cropped.originalPath+'.thumb'))>unenhanced+8,'Restored gallery thumbnail omitted enhancement');
   assert(parsed.getCreator()==='Drawkeeper'&&parsed.getAuthor()==='Drawkeeper','PDF branding did not update');
   assert(parsed.getPageCount()===2&&parsed.getTitle()==='Альбом','PDF export lost its cover or artwork page');
   passed.push('PDF export still produces a readable A4 book with a Cyrillic album title');
@@ -352,6 +411,7 @@ async function checkPhaseTwo(db,photo,expected){
   const merge=planRestore(firstState,newBackup.incoming,newBackup.verifiedFiles);
   await commit(merge.archive,merge.puts,[],null,merge.missingOriginals);
   const stored=(await readArchive()).images.find(i=>i.id===cropped.id);
+  assert(stored.autoEnhance===true,'ZIP restore lost the enabled state');
   equal(stored.cropSettings,cropped.cropSettings,'Restore transaction lost recipe');
   equal(await bytes(await readFile(stored.originalPath)),await bytes(replacement),'Restore transaction changed original');
   equal(await bytes(await readFile(stored.editedPath)),await bytes(restoredFiles.get(cropped.editedPath)),'Restore transaction changed edited image');

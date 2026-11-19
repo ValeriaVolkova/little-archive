@@ -1,3 +1,5 @@
+import {enhancedPreview} from './media.js';
+
 const full = () => ({x:0, y:0, w:1, h:1});
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 
@@ -16,14 +18,15 @@ export function validRecipe(r) {
     r.w>0 && r.h>0 && r.x+r.w<=1.0000001 && r.y+r.h<=1.0000001;
 }
 
-export function editCrop(image, previous, legacy, t, apply, onCancel) {
+export function editCrop(original, previous, legacyImage, t, apply, onCancel, initiallyEnhanced=false) {
   const dialog=document.createElement('dialog');
   dialog.className='crop-dialog';
   dialog.setAttribute('aria-label',t('crop'));
-  dialog.innerHTML=`<h2>${t('crop')}</h2><p>${t(legacy?'cropLegacy':'cropInstructions')}</p>
+  dialog.innerHTML=`<h2>${t('crop')}</h2><p>${t(legacyImage?'cropLegacy':'cropInstructions')}</p>
     <canvas></canvas><div class="crop-controls"><button data-op="out" aria-label="${t('zoomOut')}">−</button>
     <button data-op="in" aria-label="${t('zoomIn')}">+</button><button data-op="rotate">${t('rotate')} 90°</button>
-    <button data-op="reset">${t('cropReset')}</button></div><p role="alert" hidden></p>
+    <button data-op="reset">${t('cropReset')}</button>
+    <button data-op="enhance" aria-pressed="${initiallyEnhanced}">${t('enhance')}</button></div><p role="alert" hidden></p>
     <div class="crop-footer"><button data-op="cancel">${t('cancel')}</button><button data-op="skip">${t('cropSkip')}</button>
     <button class="primary" data-op="done">${t('cropDone')}</button></div>`;
   document.body.append(dialog);
@@ -32,6 +35,7 @@ export function editCrop(image, previous, legacy, t, apply, onCancel) {
   const seed=validRecipe(previous)?previous:{...full(),rotation:0};
   let turns=seed.rotation/90, rect=rotatedRect(seed,turns), zoom=1, cx=.5, cy=.5;
   let view,drag=null,pinch=null,saving=false,modified=false;
+  let enhanced=initiallyEnhanced,preview=null,previewSource=null;
   const pointers=new Map();
 
   function draw(){
@@ -42,12 +46,17 @@ export function editCrop(image, previous, legacy, t, apply, onCancel) {
     if(canvas.width!==pixelW||canvas.height!==pixelH){canvas.width=pixelW;canvas.height=pixelH;}
     ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,pixelW,pixelH);
     ctx.setTransform(ratio,0,0,ratio,0,0);
+    const image=legacyImage&&!modified?legacyImage:original;
+    if(enhanced&&previewSource!==image){
+      if(preview)preview.width=preview.height=0;
+      preview=enhancedPreview(image,1600);previewSource=image;
+    }
     const iw=image.naturalWidth,ih=image.naturalHeight;
     const scale=zoom*Math.min((width-32)/(turns%2?ih:iw),(height-32)/(turns%2?iw:ih));
     const w=scale*(turns%2?ih:iw),h=scale*(turns%2?iw:ih);
     view={x:width/2-w*cx,y:height/2-h*cy,w,h};
     ctx.save();ctx.translate(view.x+w/2,view.y+h/2);ctx.rotate(turns*Math.PI/2);
-    ctx.drawImage(image,-iw*scale/2,-ih*scale/2,iw*scale,ih*scale);ctx.restore();
+    ctx.drawImage(enhanced?preview:image,-iw*scale/2,-ih*scale/2,iw*scale,ih*scale);ctx.restore();
     const x=view.x+w*rect.x,y=view.y+h*rect.y,rw=w*rect.w,rh=h*rect.h;
     ctx.fillStyle='rgba(23,23,24,.55)';ctx.beginPath();ctx.rect(0,0,width,height);ctx.rect(x,y,rw,rh);ctx.fill('evenodd');
     ctx.strokeStyle='white';ctx.lineWidth=2;ctx.strokeRect(x,y,rw,rh);
@@ -99,20 +108,25 @@ export function editCrop(image, previous, legacy, t, apply, onCancel) {
   };
   canvas.onpointerup=canvas.onpointercancel=e=>{pointers.delete(e.pointerId);pinch=null;drag=null;};
   const observer=new ResizeObserver(draw);observer.observe(canvas);draw();
-  const close=()=>{observer.disconnect();dialog.close();dialog.remove();};
+  const close=()=>{observer.disconnect();if(preview)preview.width=preview.height=0;dialog.close();dialog.remove();};
   dialog.oncancel=e=>{e.preventDefault();if(!saving){onCancel?.();close();}};
   dialog.onclick=async e=>{
     const op=e.target.closest('button')?.dataset.op;
     if(!op||saving)return;
+    if(op==='enhance'){
+      enhanced=!enhanced;
+      e.target.closest('button').setAttribute('aria-pressed',String(enhanced));
+      draw();return;
+    }
     if(op==='cancel'||op==='skip'){if(op==='cancel')onCancel?.();close();return;}
     if(op==='in'||op==='out'){setZoom(zoom*(op==='in'?1.25:.8));return;}
     if(op==='reset'){modified=true;turns=0;rect=full();cx=cy=.5;zoom=1;}
     if(op==='rotate'){modified=true;turns=(turns+1)%4;rect=turn(rect);zoom=1;cx=cy=.5;}
     if(op==='done'){
-      if(!modified){close();return;}
+      if(!modified&&enhanced===initiallyEnhanced){close();return;}
       saving=true;
       dialog.querySelectorAll('button').forEach(el=>el.disabled=true);
-      try{await apply({...rotatedRect(rect,(4-turns)%4),rotation:turns*90});close();}
+      try{await apply({...rotatedRect(rect,(4-turns)%4),rotation:turns*90},modified,enhanced);close();}
       catch{const error=dialog.querySelector('[role=alert]');error.hidden=false;error.textContent=t('imageError');}
       finally{saving=false;dialog.querySelectorAll('button').forEach(el=>el.disabled=false);}
       return;
