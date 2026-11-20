@@ -91,22 +91,28 @@ body,.field,.field input,.field select,.field textarea,input,textarea,select,but
 .danger {color:var(--error);background:var(--surface-error);border-color:var(--line);}
 .danger:hover {background:var(--pink);color:var(--ink);}
 .mobile-nav {
-  background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow-book);
+  background:#FFFFFF;border:0;box-shadow:var(--shadow-book);
   left:max(10px,env(safe-area-inset-left));right:max(10px,env(safe-area-inset-right));
-  bottom:calc(8px + var(--bottom-inset));gap:2px;border-radius:20px;padding:5px;
+  bottom:calc(8px + var(--bottom-inset));gap:0;border-radius:9999px;padding:6px;
 }
-.mobile-nav button {min-width:0;min-height:48px;gap:3px;color:var(--ink);font-size:clamp(10px,2.8vw,11px);font-weight:600;}
-.mobile-nav button.active {background:var(--surface-highlight);color:var(--ink);}
-.mobile-nav button.active .icon {color:var(--ink);}
+.mobile-nav button {
+  place-self:center;display:grid;place-items:center;width:64px;height:64px;
+  min-width:0;min-height:64px;max-width:none;padding:0;border:0;border-radius:50%;
+  color:#42291F;background:transparent;gap:0;
+}
+.mobile-nav button.active {background:#FFD19C;color:#42291F;}
+.mobile-nav .icon {width:28px;height:28px;stroke-width:1.8;}
+.mobile-nav button.active .icon {color:#42291F;transform:none;}
 @media(max-width:800px){
-  .main {padding-top:calc(10px + var(--top-inset));padding-bottom:calc(var(--nav-height) + 22px + var(--bottom-inset));}
+  .main {padding-top:calc(10px + var(--top-inset));padding-bottom:calc(var(--nav-height) + 40px + var(--bottom-inset));}
   .topbar {display:none;}
-  .mobile-nav {display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) 62px repeat(2,minmax(0,1fr));}
+  .mobile-nav {display:grid;grid-template-columns:minmax(0,1fr) 84px minmax(0,1fr);grid-template-rows:64px;}
   .mobile-nav .nav-add {
-    place-self:center;width:56px;height:56px;margin-top:-22px;padding:0;border:2px solid var(--paper);
-    border-radius:50%;background:var(--orange);box-shadow:0 4px 8px rgb(66 41 31 / 22%);
+    width:84px;height:84px;margin:0;transform:translateY(-14px);padding:0;border:0;
+    border-radius:50%;background:linear-gradient(135deg,#FFB347 0%,#FF8951 50%,#F65F71 100%);
+    color:#FFF7F0;box-shadow:none;
   }
-  .mobile-nav .nav-add .icon {width:27px;height:27px;}
+  .mobile-nav .nav-add .icon {width:44px;height:44px;stroke-width:3;color:#FFF7F0;}
 }
 
 .welcome-paper {

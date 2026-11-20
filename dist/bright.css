@@ -25,7 +25,6 @@
 @media(max-width:800px){
   .app-tools {display:flex;justify-content:flex-end;margin-bottom:3px;position:relative;z-index:1;}
   .app-tools + .update-banner {margin-bottom:12px;}
-  .mobile-nav button {font-size:clamp(9.5px,2.7vw,12px);}
 }
 @media(min-width:880px){
   .settings-grid {grid-template-columns:repeat(2,minmax(0,1fr));max-width:1024px;}
@@ -133,9 +132,6 @@
 [data-theme="bright"] .age-chart {padding:11px 14px;}
 [data-theme="bright"] .artist-card strong,[data-theme="bright"] .story-photo strong {font-size:15px;}
 [data-theme="bright"] .age-bars small {font-size:12px;}
-[data-theme="bright"] .mobile-nav {background:var(--paper);border-color:var(--line);box-shadow:var(--shadow-paper);}
-[data-theme="bright"] .mobile-nav .nav-add {background:var(--coral);border-color:#FFF1E7;color:#fff;}
-[data-theme="bright"] .mobile-nav .nav-add .icon {color:#fff;}
 [data-theme="bright"] .crop-dialog,[data-theme="bright"] dialog#modal {background:var(--paper);}
 [data-theme="bright"] .enhance-control input {accent-color:var(--coral);}
 
@@ -153,7 +149,6 @@
     background:url('./assets/bright-bottom.svg') center bottom / 100% 100% no-repeat;
     z-index:0;pointer-events:none;
   }
-  [data-theme="bright"] .mobile-nav {bottom:calc(9px + var(--bottom-inset));}
   [data-theme="bright"] .settings-intro {padding-top:7px;}
 }
 @media(min-width:760px){

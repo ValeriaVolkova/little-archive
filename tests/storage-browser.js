@@ -456,7 +456,8 @@ async function checkPhaseTwo(db,photo,expected){
   const doc=()=>frame.contentDocument;
   const query=selector=>doc()?.querySelector(selector);
   const click=async selector=>(await waitFor(()=>query(selector))).click();
-  const nav=page=>click(page==='settings'?'.app-tools .settings-shortcut':'.mobile-nav [data-page="'+page+'"]');
+  const nav=page=>click(page==='settings'?'.app-tools .settings-shortcut':
+    (['stats','favorites'].includes(page)?'.navigation':'.mobile-nav')+' [data-page="'+page+'"]');
   const value=(input,next)=>{
     input.value=next;
     input.dispatchEvent(new Event('input',{bubbles:true}));
@@ -465,7 +466,7 @@ async function checkPhaseTwo(db,photo,expected){
   await waitFor(()=>query('.archive-home'));
   assert(query('.mobile-nav [aria-current=page]').dataset.page==='archive','Initial tab was not Archive');
   equal([...doc().querySelectorAll('.mobile-nav button')].map(el=>el.dataset.page||el.dataset.action),
-    ['archive','albums','newWork','favorites','stats'],'Five-item navigation is out of order');
+    ['archive','newWork','albums'],'Three-item navigation is out of order');
   await nav('stats');
   assert(doc().querySelectorAll('.artist-card').length===2&&query('.collection-summary p').textContent==='2 работы','Stats did not count real profiles and artwork');
   await click('.artist-card[data-id=misha]');
@@ -727,7 +728,7 @@ async function checkPhaseTwo(db,photo,expected){
   value(profile.elements.name,'Новый профиль');value(profile.elements.birthday,'2021-04-29');
   profile.querySelector('[data-action=submit]').click();
   await waitFor(()=>firstQuery('#archive-results [data-action=newWork]'));
-  firstQuery('.mobile-nav [data-page=stats]').click();
+  firstQuery('.navigation [data-page=stats]').click();
   assert(firstQuery('.artist-card')&&!firstQuery('.age-chart,.story-pair'),'Empty Stats has invented statistics or artwork');
   const firstState=await readArchive();
   assert(firstState.children.length===1&&firstState.artworks.length===0,'Onboarding mixed demo records into the archive');

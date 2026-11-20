@@ -62,6 +62,7 @@ let modalCleanup=()=>{},modalAction=null,toastTimer;
 const demoFiles=new Map(),urlCache=new Map(),modalUrls=[];
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icons={
+bookOpenCheck:'<path d="M12 7v14m-9-3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3Z"/><path d="m16 12 2 2 4-4"/>',
 stats:'<path d="M5 20V11m7 9V4m7 16V8"/>',
 palette:'<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.2A1.7 1.7 0 0 1 16 15h2a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><path d="M7 12h.01M9 7h.01m5-1h.01m3 4h.01"/>',
 grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -160,10 +161,10 @@ const updates=updateManager({
   }
 });
 function navigation(mobile=false){
-  const tab=([id,symbol])=>button('nav',t(id),(mobile?'':'nav-button ')+(page===id?'active':''),symbol,
-    'data-page="'+id+'" aria-current="'+(page===id?'page':'false')+'"');
-  const items=tabs.map(tab);
-  if(mobile)items.splice(2,0,button('newWork','','nav-add','plus','aria-label="'+e(t('addArtwork'))+'"'));
+  const tab=([id,symbol])=>button('nav',mobile?'':t(id),(mobile?'':'nav-button ')+(page===id?'active':''),symbol,
+    'data-page="'+id+'" aria-label="'+e(t(id))+'" aria-current="'+(page===id?'page':'false')+'"');
+  const items=(mobile?[['archive','grid'],['albums','bookOpenCheck']]:tabs).map(tab);
+  if(mobile)items.splice(1,0,button('newWork','','nav-add','plus','aria-label="'+e(t('addArtwork'))+'"'));
   return '<nav class="'+(mobile?'mobile-nav':'navigation')+'">'+items.join('')+'</nav>';
 }
 let stopAlbumDrag;

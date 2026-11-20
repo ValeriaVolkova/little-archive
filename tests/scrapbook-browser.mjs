@@ -48,7 +48,7 @@ try{
     await commit(state,puts);
   });
   await page.reload();await page.locator('.archive-home').waitFor();
-  await page.locator('.mobile-nav [data-page=stats]').click();
+  await page.locator('.navigation [data-page=stats]').evaluate(button=>button.click());
   assert.equal(await page.locator('.collection-summary p').textContent(),'500 работ');
   assert.equal(await page.locator('.artist-card').count(),2);
   assert.equal(await page.locator('.story-photo').count(),4);
@@ -62,7 +62,7 @@ try{
     return {archive,digest:[...new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()))],lang:localStorage.getItem('little-archive-language')};
   });
   const albums=await checkAlbums(page,url,output,chromium);
-  await page.locator('.mobile-nav [data-page=stats]').click();
+  await page.locator('.navigation [data-page=stats]').evaluate(button=>button.click());
   const before=await signature();
   await browser.close();browser=await open();page=await browser.newPage();await page.goto(url);
   await page.locator('.archive-home').waitFor();assert.deepEqual(await signature(),before);
@@ -119,7 +119,7 @@ try{
   assert.equal(await page.locator('.masonry button').first().getAttribute('data-id'),'sample-499');
   await page.locator('.archive-options [data-action=favorites]').click();
   assert.equal(await page.locator('.masonry button').count(),72);
-  await page.locator('.mobile-nav [data-page=stats]').click();
+  await page.locator('.navigation [data-page=stats]').evaluate(button=>button.click());
   await page.locator('.mobile-nav [data-page=archive]').click();
   assert.equal(await page.locator('#sort').inputValue(),'oldest');
   assert.equal(await page.locator('.masonry button').count(),72);

@@ -32,17 +32,48 @@ try{
   },{once:true}));
   await page.goto(url);
   const tab=name=>page.locator('nav [data-page="'+name+'"]:visible');
-  const go=name=>name==='settings'?page.locator('.settings-shortcut:visible').click():tab(name).click();
+  // Stats and Favorites remain sidebar routes, no longer bottom-menu items.
+  const go=name=>name==='settings'?page.locator('.settings-shortcut:visible').click():
+    ['stats','favorites'].includes(name)?page.locator('.navigation [data-page="'+name+'"]').evaluate(button=>button.click()):tab(name).click();
   const appearance=()=>page.locator('html').getAttribute('data-theme');
   const shot=async name=>{
     await page.evaluate(async()=>{await document.fonts.ready;await new Promise(requestAnimationFrame);});
     await page.screenshot({path:join(output,name+'.png'),animations:'disabled'});
   };
+  const checkBottom=async active=>{
+    const layout=await page.locator('.mobile-nav').evaluate((nav,active)=>{
+      const buttons=[...nav.querySelectorAll('button')],box=nav.getBoundingClientRect(),style=getComputedStyle(nav);
+      const [archive,add,albums]=buttons,center=add.getBoundingClientRect(),addStyle=getComputedStyle(add);
+      const bounds=buttons.map(button=>button.getBoundingClientRect());
+      return {
+        order:buttons.map(button=>button.dataset.page||button.dataset.action).join(',')==='archive,newWork,albums',
+        labels:buttons.every(button=>button.getAttribute('aria-label')?.trim()&&!button.textContent.trim()),
+        capsule:style.backgroundColor==='rgb(255, 255, 255)'&&style.borderRadius==='9999px',
+        centered:Math.abs(center.left+center.width/2-innerWidth/2)<.5&&center.top<box.top,
+        size:center.width===84&&center.height===84,
+        spacing:bounds[0].right<center.left&&center.right<bounds[2].left,
+        plus:addStyle.borderTopWidth==='0px'&&addStyle.boxShadow==='none'&&
+          addStyle.backgroundImage==='linear-gradient(135deg, rgb(255, 179, 71) 0%, rgb(255, 137, 81) 50%, rgb(246, 95, 113) 100%)'&&
+          getComputedStyle(add.querySelector('svg')).color==='rgb(255, 247, 240)'&&!add.hasAttribute('aria-current'),
+        circles:[archive,albums].every(button=>{
+          const rect=button.getBoundingClientRect(),css=getComputedStyle(button),image=button.querySelector('svg').getBoundingClientRect();
+          return rect.width===64&&rect.height===64&&css.borderRadius==='50%'&&
+            css.backgroundColor===(button.dataset.page===active?'rgb(255, 209, 156)':'rgba(0, 0, 0, 0)')&&
+            css.color==='rgb(66, 41, 31)'&&rect.top>=box.top&&rect.bottom<=box.bottom&&
+            Math.abs(image.left+image.width/2-rect.left-rect.width/2)<.5&&
+            Math.abs(image.top+image.height/2-rect.top-rect.height/2)<.5;
+        }),
+        clearance:parseFloat(getComputedStyle(document.querySelector('.main')).paddingBottom)>=innerHeight-center.top,
+        noOverflow:document.documentElement.scrollWidth<=innerWidth
+      };
+    },active);
+    assert.ok(Object.values(layout).every(Boolean),JSON.stringify({active,layout}));
+  };
   await page.locator('.archive-home h1').waitFor();
   assert.equal(await tab('archive').getAttribute('aria-current'),'page');
   assert.equal(await appearance(),'bright');
   assert.deepEqual(await page.locator('.mobile-nav button').evaluateAll(buttons=>
-    buttons.map(button=>button.dataset.page||button.dataset.action)),['archive','albums','newWork','favorites','stats']);
+    buttons.map(button=>button.dataset.page||button.dataset.action)),['archive','newWork','albums']);
   await go('favorites');
   assert.equal(await page.locator('#archive-results h2').innerText(),'A place for your favorites');
   await page.locator('#archive-results [data-page=archive]').click();
@@ -82,6 +113,20 @@ try{
   await go('albums');
   await page.locator('.book-photo').first().evaluate(img=>img.decode());
   await shot('Albums');
+  // Both palettes and all requested iPhone widths share the approved geometry.
+  for(const theme of ['classic','bright']){
+    await go('settings');
+    await page.locator('[data-action=design][data-theme='+theme+']').click();
+    for(const width of [320,375,390,430]){
+      await page.setViewportSize({width,height:844});
+      for(const active of ['archive','albums']){await go(active);await checkBottom(active);}
+    }
+  }
+  await page.setViewportSize({width:390,height:844});
+  await page.locator('.nav-add').focus();
+  await page.keyboard.press('Enter');
+  await page.locator('#artwork-form').waitFor();
+  await page.locator('#modal .modal-header [data-action=close]').click();
   await go('favorites');
   assert.equal(await page.locator('#archive-count').innerText(),'5 artworks');
   await page.locator('#archive-results img').first().evaluate(img=>img.decode());
@@ -147,6 +192,8 @@ try{
   for(const code of ['es','ru','en']){
     await page.locator('.language-options [data-language='+code+']').click();
     assert.equal(await page.locator('html').getAttribute('lang'),code);
+    const labels={en:['Archive','Add artwork','Albums'],es:['Archivo','Añadir obra','Álbumes'],ru:['Архив','Добавить работу','Альбомы']};
+    assert.deepEqual(await page.locator('.mobile-nav button').evaluateAll(buttons=>buttons.map(button=>button.getAttribute('aria-label'))),labels[code]);
     const layout=await page.evaluate(()=>{
       const controls=[...document.querySelectorAll('.settings-actions button,.design-choice,.language-options button')];
       return document.documentElement.scrollWidth<=innerWidth&&controls.every(control=>

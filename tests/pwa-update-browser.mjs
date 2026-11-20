@@ -103,7 +103,7 @@ try{
   for(const work of originalWorks)await app.locator('[data-action=pick][data-id="'+work.id+'"]').click();
   await app.locator('[data-action=confirmPick]').click();
   await app.locator('.album-gallery .work-open').last().waitFor();
-  await app.locator('.mobile-nav [data-page=settings]').click();
+  await app.locator('.settings-shortcut:visible,.mobile-nav [data-page=settings]').click();
   await app.locator('[data-language=en]').click();
   await app.evaluate(()=>localStorage.setItem('test-marker','keep'));
   const oldManifest=await app.evaluate(async()=> (await fetch('./manifest.webmanifest')).json());
@@ -207,7 +207,8 @@ try{
   if(process.platform==='win32')console.log('PASS: Windows Desktop shortcut count remained '+installedShortcuts.length+' across two updates');
   console.log('PASS: failed download leaves old version usable; prompt, editor and other-window guards, explicit update and correct build');
   const navigation=async(tab,expected)=>{
-    await app.locator(tab==='settings'?'.app-tools .settings-shortcut':'.mobile-nav [data-page='+tab+']').click();
+    if(tab==='stats')await app.locator('.navigation [data-page=stats]').evaluate(button=>button.click());
+    else await app.locator(tab==='settings'?'.app-tools .settings-shortcut':'.mobile-nav [data-page='+tab+']').click();
     if(expected)await app.getByRole('heading',{name:expected,exact:true}).waitFor();
     await checkMobileHeader(app);
   };
