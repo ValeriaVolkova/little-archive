@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:http';
 import {readFile,mkdtemp} from 'node:fs/promises';
@@ -8,7 +10,7 @@ import {tmpdir} from 'node:os';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_PATH||'playwright');
 const [old,current]=process.argv.slice(2).map(arg=>resolve(arg));
 let stage=0,failInstall=false;
-const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.ttf':'font/ttf','.svg':'image/svg+xml','.webmanifest':'application/manifest+json'};
+const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.ttf':'font/ttf','.svg':'image/svg+xml','.png':'image/png','.webmanifest':'application/manifest+json'};
 const server=createServer(async(req,res)=>{
   if(req.url==='/harness'){res.writeHead(200,{'Content-Type':'text/html'}).end('<title>Local test</title>');return;}
   const path=new URL(req.url,'http://localhost').pathname.replace(/^\/little-archive\//,'')||'index.html';
@@ -27,7 +29,35 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const url='http://127.0.0.1:'+server.address().port+'/little-archive/';
 const profile=await mkdtemp(join(tmpdir(),'little-archive-pwa-'));
 const open=()=>chromium.launchPersistentContext(profile,{executablePath:process.env.BROWSER_PATH,headless:true,args:['--disable-os-integration-for-testing'],viewport:{width:390,height:844},locale:'en'});
-let browser;
+let browser,installed=false;
+async function testDesktopShortcuts(){
+  if(process.platform!=='win32')return [];
+  // Use Windows' resolved Desktop folder and count only shortcuts owned by
+  // this test profile, including when the Desktop is redirected to OneDrive.
+  const script=String.raw`
+    $desktop=[Environment]::GetFolderPath('DesktopDirectory')
+    $shell=New-Object -ComObject WScript.Shell
+    Get-ChildItem -LiteralPath $desktop -File -Filter '*.lnk' | ForEach-Object {
+      $shortcut=$shell.CreateShortcut($_.FullName)
+      if($shortcut.Arguments.Contains($env:DRAWKEEPER_TEST_PROFILE)){
+        $_.Name
+      }
+    }`;
+  const {stdout}=await promisify(execFile)('powershell.exe',['-NoProfile','-NonInteractive','-Command',script],{
+    env:{...process.env,DRAWKEEPER_TEST_PROFILE:profile},windowsHide:true
+  });
+  return stdout.split(/\r?\n/).filter(Boolean).sort();
+}
+async function checkHeader(page){
+  const brand=page.locator('.mobile-brand');
+  assert.equal(await brand.innerText(),'');
+  const image=brand.locator('img');
+  assert.equal(await image.getAttribute('alt'),'');
+  assert.equal(await image.getAttribute('src'),'./assets/drawkeeper-192.png');
+  await image.evaluate(element=>element.decode());
+  assert.equal(await brand.getByRole('button').count(),0);
+}
+
 async function launch(){
   const opened=browser.waitForEvent('page');
   const {targetId}=await cdp.send('PWA.launch',{manifestId:url});
@@ -48,6 +78,8 @@ try{
   await tab.evaluate(()=>navigator.serviceWorker.ready.then(()=>true));
   cdp=await browser.newCDPSession(tab);
   await cdp.send('PWA.install',{manifestId:url,installUrlOrBundleUrl:url});
+  installed=true;
+  const installedShortcuts=await testDesktopShortcuts();
   await cdp.send('PWA.changeAppUserSettings',{manifestId:url,displayMode:'standalone'});
   let app=await launch();const harness=await browser.newPage();await harness.goto(new URL('/harness',url).href);cdp=await browser.newCDPSession(harness);await tab.close();
   for(const candidate of browser.pages())if(candidate!==app&&candidate!==harness&&candidate.url().startsWith(url))await candidate.close();
@@ -107,10 +139,13 @@ try{
   const first=await app.locator('[data-build]').innerText();
   assert.deepEqual(await snapshot(app),before);
   assert.match(await app.title(),/^Drawkeeper · Little art\. Big memories\.$/);
-  assert.match(await app.locator('.mobile-brand').innerText(),/Drawkeeper/);
+  await checkHeader(app);
+  assert.deepEqual(await testDesktopShortcuts(),installedShortcuts,'First update changed desktop shortcut names');
   const manifest=await app.evaluate(async()=> (await fetch('./manifest.webmanifest')).json());
   assert.equal(manifest.name,'Drawkeeper');assert.equal(manifest.short_name,'Drawkeeper');
-  for(const key of ['start_url','scope','id','display','icons'])assert.deepEqual(manifest[key],oldManifest[key]);
+  for(const key of ['start_url','scope','id','display'])assert.deepEqual(manifest[key],oldManifest[key]);
+  assert.deepEqual(manifest.icons.map(icon=>icon.sizes),['192x192','512x512']);
+  await cdp.send('PWA.getOsAppState',{manifestId:url});
   assert.equal(await app.locator('meta[name="apple-mobile-web-app-title"]').getAttribute('content'),'Drawkeeper');
   const restoreBrowser=await chromium.launch({executablePath:process.env.BROWSER_PATH,headless:true});
   try{
@@ -173,11 +208,13 @@ try{
   assert.match(await app.locator('[data-build]').innerText(),/aaaaaaaaaaaaaaaa/);
   assert.doesNotMatch(first,/aaaaaaaaaaaaaaaa/);
   assert.deepEqual(await snapshot(app),saved);
+  assert.deepEqual(await testDesktopShortcuts(),installedShortcuts,'Second update changed desktop shortcut names');
+  if(process.platform==='win32')console.log('PASS: Windows Desktop shortcut count remained '+installedShortcuts.length+' across two updates');
   console.log('PASS: failed download leaves old version usable; prompt, editor and other-window guards, explicit update and correct build');
   const navigation=async(tab,expected)=>{
     await app.locator('.mobile-nav [data-page='+tab+']').click();
     if(expected)await app.getByRole('heading',{name:expected,exact:true}).waitFor();
-    assert.equal(await app.locator('.mobile-brand').innerText(),'Drawkeeper');
+    await checkHeader(app);
   };
   await app.locator('[data-language=ru]').click();
   assert.equal(await app.title(),'Drawkeeper · Маленькие рисунки. Большие воспоминания.');
@@ -215,9 +252,23 @@ try{
   assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
   await app.locator('.mobile-nav [data-page=archive]').click();
   await app.waitForFunction(()=>document.querySelector('.work-card img')?.naturalWidth>0);
+  await checkHeader(app);
   await app.locator('.mobile-nav [data-page=albums]').click();
   assert.ok(await app.evaluate(async()=> (await fetch('./assets/playful-motifs.svg')).ok));
   assert.match(await app.locator('.book-jacket').first().getAttribute('class'),/jacket-lavender/);
   console.log('PASS: installed PWA restarts offline with Onest, artwork and cover motifs');
   console.log('PASS: installed app after browser restart preserves child, three artworks, exact originals, draft and localStorage marker, and Spanish language choice');
-}finally{await browser?.close();server.close();}
+}finally{
+  try{
+    if(installed){
+      // Remove only the installation created above in the disposable loopback
+      // profile. Closing Chrome alone leaves its Windows shortcut behind.
+      const cleanup=await browser.newCDPSession(await browser.newPage());
+      await cleanup.send('PWA.uninstall',{manifestId:url});
+      assert.deepEqual(await testDesktopShortcuts(),[],'Test installation left a Desktop shortcut');
+    }
+  }finally{
+    await browser?.close();
+    server.close();
+  }
+}

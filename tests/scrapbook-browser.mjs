@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_PATH||'playwright');
 const artifact=resolve(process.argv[2]),output=resolve(process.argv[3]);
 await mkdir(output,{recursive:true});
-const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.ttf':'font/ttf','.webmanifest':'application/manifest+json'};
+const types={'.js':'text/javascript','.css':'text/css','.html':'text/html','.svg':'image/svg+xml','.png':'image/png','.ttf':'font/ttf','.webmanifest':'application/manifest+json'};
 const server=createServer(async(req,res)=>{
   const path=new URL(req.url,'http://localhost').pathname.slice(1)||'index.html';
   if(!/^[\w./-]+$/.test(path)||path.includes('..'))return res.writeHead(404).end();
@@ -130,6 +130,21 @@ try{
   await page.locator('#photo-list [data-action=crop]').first().click();
   await page.locator('.crop-dialog [data-op=enhance]').click();
   await page.screenshot({path:join(output,'Crop.png'),animations:'disabled'});
+  for(const width of [390,320]){
+    await page.setViewportSize({width,height:844});
+    const brand=page.locator('.mobile-brand');
+    assert.equal(await brand.innerText(),'');
+    assert.equal(await brand.locator('img').getAttribute('alt'),'');
+    await brand.locator('img').evaluate(image=>image.decode());
+    const icon=await brand.locator('img').boundingBox();
+    const header=await page.locator('.topbar').boundingBox();
+    assert.equal(icon.width,icon.height);
+    assert.ok(icon.x>=header.x&&icon.y>=header.y&&icon.x+icon.width<=header.x+header.width);
+    const actions=await page.locator('.top-actions').boundingBox();
+    if(actions?.width)assert.ok(icon.x+icon.width<=actions.x);
+    assert.equal(await page.locator('.crop-dialog [data-op=done]').isEnabled(),true);
+  }
+  await page.setViewportSize({width:390,height:844});
   await page.locator('.crop-dialog [data-op=cancel]').click();
   const title=page.locator('#artwork-form input[name=title]');
   await title.fill('Unsaved edit');

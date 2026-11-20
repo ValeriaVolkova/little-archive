@@ -14,3 +14,26 @@ for(const [font,license] of [
  assert.match(await readFile(new URL('../dist/assets/fonts/'+license,import.meta.url),'utf8'),/SIL OPEN FONT LICENSE/);
 });
 test('PWA caches all added presentation assets without clearing user stores',async()=>{const sw=await readFile(new URL('../dist/sw.js',import.meta.url),'utf8');for(const path of ['editorial.css','playful.css','ui.js','assets/playful-motifs.svg','assets/fonts/Onest.ttf'])assert.ok(sw.includes(path));assert.doesNotMatch(sw,/indexedDB|localStorage/);});
+
+test('Drawkeeper icon sizes are correct and the assets are available offline',async()=>{
+  const read=name=>readFile(new URL('../dist/'+name,import.meta.url));
+  const manifest=JSON.parse(await read('manifest.webmanifest'));
+  assert.deepEqual(
+    {name:manifest.name,shortName:manifest.short_name,id:manifest.id,start:manifest.start_url,scope:manifest.scope},
+    {name:'Drawkeeper',shortName:'Drawkeeper',id:undefined,start:'./',scope:'./'}
+  );
+  const html=await read('index.html'),worker=await read('sw.js');
+  assert.match(html.toString(),/rel="icon" href="\.\/assets\/drawkeeper-32\.png"/);
+  assert.match(html.toString(),/rel="apple-touch-icon" href="\.\/assets\/drawkeeper-180\.png"/);
+  assert.deepEqual(manifest.icons.map(icon=>[icon.src,icon.sizes,icon.type]),[
+    ['./assets/drawkeeper-192.png','192x192','image/png'],
+    ['./assets/drawkeeper-512.png','512x512','image/png']
+  ]);
+  for(const size of [32,180,192,512]){
+    const path='assets/drawkeeper-'+size+'.png';
+    const png=await read(path);
+    assert.equal(png.subarray(1,4).toString(),'PNG');
+    assert.deepEqual([png.readUInt32BE(16),png.readUInt32BE(20)],[size,size]);
+    assert.ok(worker.includes("'./"+path+"'"));
+  }
+});

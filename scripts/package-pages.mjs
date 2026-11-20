@@ -12,7 +12,8 @@ const allowedFiles=[
   'app.js','album-ux.js','pwa-update.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
   'vendor/heic-to.js','vendor/heic-to.LICENSE.txt','crop-editor.js','scrapbook.js','media.js','pdf.js','storage-codec.js','storage-error.js','ui.js','zip.js',
   'assets/playful-motifs.svg','assets/fonts/Onest.ttf','assets/fonts/Onest-OFL.txt','assets/fish.svg','assets/flowers.svg',
-  'assets/house.svg','assets/icon.svg','assets/leaf.svg','assets/rainbow.svg',
+  'assets/house.svg','assets/leaf.svg','assets/rainbow.svg',
+  'assets/drawkeeper-32.png','assets/drawkeeper-180.png','assets/drawkeeper-192.png','assets/drawkeeper-512.png',
   'assets/sun.svg',
   'vendor/pdf-lib.min.js','vendor/pdf-lib.LICENSE.md'
 ];

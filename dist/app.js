@@ -158,10 +158,10 @@ function render(){
   imagesById=new Map(state.images.map(image=>[image.id,image]));
   if(filters.child&&!state.children.some(c=>c.id===filters.child))filters.child='';
   localizeDocument();app.dataset.page=page;
-  app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/icon.svg" alt=""><div><strong>'+appName+'</strong><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
+  app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/drawkeeper-192.png" alt=""><div><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
   '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="childPage" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
   button('newChild',t('addChild'),'child-filter add','plus')+'<div class="side-foot">'+icon('lock')+'<div>'+e(t('local'))+'<br>'+e(t('private'))+'</div></div></aside><main class="main">'+
-  '<div class="topbar"><div class="mobile-brand"><img src="./assets/icon.svg" alt="">'+appName+'</div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"')+'</div></div>'+
+  '<div class="topbar"><div class="mobile-brand"><img src="./assets/drawkeeper-192.png" alt=""></div><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"')+'</div></div>'+
   '<section class="update-banner panel" hidden><span role="status"></span>'+button('applyUpdate',t('applyUpdate'),'secondary')+'</section>'+
   (section?.type==='album'?albumView(section.id):section?.type==='child'?childView(section.id):{home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
   hydrate();updates.show();
