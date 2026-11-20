@@ -230,7 +230,7 @@ function statsView(){
         </button>`).join('')}</div></section>`:''}
     ${charts?`<section class="dashboard-section"><h2>${e(t('artByAge'))}</h2><div class="age-charts">${charts}</div></section>`:''}
     ${story.timeline?`<section class="dashboard-section"><h2>${e(t('firstAndLast'))}</h2><p class="story-child">${e(story.timeline[0].child.name)}</p>
-      <div class="story-pair">${storyPhoto(story.timeline[0],t('firstDrawing'))}${storyPhoto(story.timeline[1],t('latestDrawing'))}</div></section>`:''}
+      <div class="story-pair story-timeline">${storyPhoto(story.timeline[0],t('firstDrawing'))}${storyPhoto(story.timeline[1],t('latestDrawing'))}</div></section>`:''}
     ${story.sameAge?`<section class="dashboard-section"><h2>${e(t('atTheSameAge'))}</h2>
       <div class="story-pair">${story.sameAge.map(entry=>storyPhoto(entry)).join('')}</div></section>`:''}
   </div>`;
