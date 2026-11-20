@@ -9,7 +9,7 @@ import {BackupPhotoError,createBackup,inspectBackup,planRestore} from './backup-
 import {BackupLimitError} from './zip.js';
 import {readArchive,readFile,commit,clientId,readDrafts,saveDraft} from './db.js';
 import {appName,languages,localizeDocument,t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
-import {preparePhoto,raster,loadImage,download,photoDate,chooseArtworkDate} from './media.js';
+import {enhancementLevel,preparePhoto,raster,loadImage,download,photoDate,chooseArtworkDate} from './media.js';
 import {createPDF} from './pdf.js';
 import {decoration} from './ui.js';
 
@@ -462,7 +462,7 @@ async function artworkEditor(id,recovered=null){
   async function openCrop(p,onCancel,preview){
     const source=preview||await loadImage(p.original);
     const legacyImage=p.edited&&!p.cropSettings?await loadImage(p.edited):null;
-    editCrop(source,p.cropSettings,legacyImage,t,async (recipe,cropChanged,enhanced)=>{
+    editCrop(source,p.cropSettings,legacyImage,t,async (recipe,cropChanged,level)=>{
       let cropUpdate={};
       if(cropChanged){
         const full=recipe.rotation===0&&recipe.x<1e-9&&recipe.y<1e-9&&recipe.w>1-1e-9&&recipe.h>1-1e-9;
@@ -471,10 +471,10 @@ async function artworkEditor(id,recovered=null){
           height:result?.height||source.naturalHeight,cropSettings:full?null:recipe,changed:true};
       }
       const base=(cropChanged?cropUpdate.edited:p.edited)||source;
-      const thumb=(await raster(base,640,0,null,enhanced)).blob;
-      Object.assign(p,cropUpdate,{thumb,autoEnhance:enhanced,generatedThumb:true});
+      const thumb=(await raster(base,640,0,null,level)).blob;
+      Object.assign(p,cropUpdate,{thumb,enhanceIntensity:level,autoEnhance:level>0,generatedThumb:true});
       dirty=true;paintPhotos();
-    },onCancel,p.autoEnhance===true);
+    },onCancel,preview?undefined:enhancementLevel(p));
   }
   if(originalWork){
     busy=true;
@@ -484,8 +484,8 @@ async function artworkEditor(id,recovered=null){
         const original=await getFile(meta.originalPath),edited=meta.editedPath?await getFile(meta.editedPath):null;
         let generatedThumb=false;
         const autoEnhance=meta.autoEnhance===true;
-        const thumb=await getFile(meta.originalPath+'.thumb').catch(async()=>{generatedThumb=true;return (await raster(edited||original,640,0,null,autoEnhance)).blob;});
-        loaded.push({id:meta.id,original,edited,width:meta.width,height:meta.height,thumb,meta,cropSettings:meta.cropSettings,generatedThumb,autoEnhance});
+        const thumb=await getFile(meta.originalPath+'.thumb').catch(async()=>{generatedThumb=true;return (await raster(edited||original,640,0,null,enhancementLevel(meta))).blob;});
+        loaded.push({id:meta.id,original,edited,width:meta.width,height:meta.height,thumb,meta,cropSettings:meta.cropSettings,generatedThumb,autoEnhance,enhanceIntensity:meta.enhanceIntensity});
       }
       photos=loaded;photosReady=true;paintPhotos();
     }catch{form.querySelector('[data-action=submit]').disabled=true;inlineError(t('editPhotosUnavailable'));}finally{busy=false;}
@@ -512,6 +512,7 @@ async function artworkEditor(id,recovered=null){
         if(p.meta?.editedPath&&p.meta.editedPath!==editedPath)deletes.push(p.meta.editedPath);
         if(!p.meta||p.changed||p.generatedThumb)puts.push([originalPath+'.thumb',p.thumb]);
         const image={...p.meta,id:p.id,artworkId,originalPath,editedPath,...(p.changed||p.cropSettings?{cropSettings:p.cropSettings??null}:{}),width:p.width,height:p.height,sortOrder:p.meta?.sortOrder??order};
+        if(p.enhanceIntensity!==undefined)image.enhanceIntensity=p.enhanceIntensity;
         if(p.autoEnhance===true)image.autoEnhance=true;
         else delete image.autoEnhance;
         next.images.push(image);
@@ -542,16 +543,16 @@ async function artworkDetail(id,index=0){
       if(action==='addAlbum')addToAlbum(id);
       if(action==='share'){
         const path=photo.editedPath||photo.originalPath,source=await getFile(path);
-        const enhanced=photo.autoEnhance===true;
-        const blob=enhanced?(await raster(source,4096,0,null,true)).blob:source;
-        const extension=enhanced?'jpg':path.split('.').at(-1);
+        const level=enhancementLevel(photo);
+        const blob=level?(await raster(source,4096,0,null,level)).blob:source;
+        const extension=level?'jpg':path.split('.').at(-1);
         const file=new File([blob],(work.title||t('untitled')).replace(/[\\/:*?"<>|]/g,'-')+'.'+extension,{type:blob.type||'image/jpeg'});
         if(navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:work.title});}catch(error){if(error.name!=='AbortError')download(file,file.name);}}else download(file,file.name);
       }
     }});
   modal.classList.add('artwork-dialog');
   const img=modal.querySelector('#detail-image');
-  try{img.src=temporaryURL((await raster(await getFile(photo.editedPath||photo.originalPath),2200,0,null,photo.autoEnhance===true)).blob);}catch{img.alt=t('imageError');}
+  try{img.src=temporaryURL((await raster(await getFile(photo.editedPath||photo.originalPath),2200,0,null,enhancementLevel(photo))).blob);}catch{img.alt=t('imageError');}
   const zoom=()=>img.classList.toggle('zoomed');img.onclick=zoom;img.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();zoom();}};
   let touchX=0;img.ontouchstart=event=>touchX=event.touches[0].clientX;img.ontouchend=event=>{const delta=event.changedTouches[0].clientX-touchX;if(Math.abs(delta)>70&&photos.length>1)artworkDetail(id,(index+(delta>0?-1:1)+photos.length)%photos.length);};
 }

@@ -128,7 +128,7 @@ try{
   await page.locator('#photo-list img').first().evaluate(image=>image.decode());
   await page.screenshot({path:join(output,'Artwork-editor.png'),animations:'disabled'});
   await page.locator('#photo-list [data-action=crop]').first().click();
-  await page.locator('.crop-dialog [data-op=enhance]').click();
+  await page.locator('.crop-dialog [data-op=enhance]').fill('85');
   await page.screenshot({path:join(output,'Crop.png'),animations:'disabled'});
   for(const width of [390,320]){
     await page.setViewportSize({width,height:844});
@@ -139,6 +139,41 @@ try{
   }
   await page.setViewportSize({width:390,height:844});
   await page.locator('.crop-dialog [data-op=cancel]').click();
+  const timing=await page.evaluate(async()=>{
+    const {editCrop}=await import('/crop-editor.js'),{loadImage}=await import('/media.js');
+    const sheet=document.createElement('canvas');sheet.width=4032;sheet.height=3024;
+    const ctx=sheet.getContext('2d'),lighting=ctx.createLinearGradient(0,0,4032,3024);
+    lighting.addColorStop(0,'#888');lighting.addColorStop(1,'#eee');
+    ctx.fillStyle=lighting;ctx.fillRect(0,0,4032,3024);
+    const source=await loadImage(await new Promise(resolve=>sheet.toBlob(resolve,'image/jpeg')));
+    sheet.width=sheet.height=0;
+    const create=document.createElement,tracked=[],times=[];
+    document.createElement=function(...args){
+      const element=create.apply(this,args);
+      if(args[0]==='canvas')tracked.push(element);
+      return element;
+    };
+    try{
+      for(let cycle=0;cycle<3;cycle++){
+        editCrop(source,null,null,key=>key,()=>{});
+        const dialog=document.querySelector('.crop-dialog'),slider=dialog.querySelector('input');
+        const screen=dialog.querySelector('canvas'),count=tracked.length;
+        for(let i=0;i<24;i++){
+          const start=performance.now();
+          slider.value=(i*13)%101;slider.dispatchEvent(new Event('input'));
+          await new Promise(resolve=>requestAnimationFrame(resolve));
+          times.push(performance.now()-start);
+        }
+        if(tracked.length!==count)throw Error('Slider allocated more canvases while dragging');
+        dialog.querySelector('[data-op=cancel]').click();
+        if(screen.width||tracked.some(canvas=>canvas.width||canvas.height)||dialog.isConnected)
+          throw Error('Closing editor retained a canvas backing store or dialog');
+      }
+    }finally{document.createElement=create;}
+    times.sort((a,b)=>a-b);
+    return {median:Math.round(times[Math.floor(times.length*.5)]),p95:Math.round(times[Math.floor(times.length*.95)])};
+  });
+  console.log('PASS: 12MP JPEG, 390×844, 72 slider updates and three open/close cycles. Input-to-animation-frame ms:',timing);
   const title=page.locator('#artwork-form input[name=title]');
   await title.fill('Unsaved edit');
   let prompted=false;

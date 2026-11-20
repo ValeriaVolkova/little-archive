@@ -1,4 +1,4 @@
-import {enhancedPreview,loadImage} from './media.js';
+import {enhancementLevel,enhancedPreview,loadImage} from './media.js';
 import {appName,t,dateText} from './i18n.js';
 function textLines(ctx,text,x,y,width,lineHeight,maxLines=4){
   const words=text.split(/\s+/);let line='',lines=[];
@@ -24,7 +24,8 @@ export async function createPDF(archive,album,getFile,showCaptions,onProgress){
     }else{
       const work=works[pageIndex-1],meta=archive.images.find(i=>i.id===work.coverImageId),img=await loadImage(await getFile(meta.editedPath||meta.originalPath));
       const maxW=1454,maxH=showCaptions?1840:2099,scale=Math.min(maxW/img.naturalWidth,maxH/img.naturalHeight),w=img.naturalWidth*scale,h=img.naturalHeight*scale;
-      const enhanced=meta.autoEnhance===true?enhancedPreview(img,Math.ceil(Math.max(w,h))):null;
+      const level=enhancementLevel(meta);
+      const enhanced=level?enhancedPreview(img,Math.ceil(Math.max(w,h)),level):null;
       ctx.drawImage(enhanced||img,(1654-w)/2,120+(maxH-h)/2,w,h);
       if(enhanced)enhanced.width=enhanced.height=0;
       if(img.naturalWidth/(w/200)<150||img.naturalHeight/(h/200)<150)lowResolution++;

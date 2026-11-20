@@ -360,7 +360,10 @@ input[type="checkbox"],input[type="radio"] {accent-color:var(--focus);}
 
 .language-options button {min-width:44px;min-height:44px;padding-inline:8px;font:600 13px/1.15 var(--font-ui);}
 .crop-dialog canvas {background:var(--ink);}
-.crop-dialog button[data-op="enhance"][aria-pressed="true"] {background:var(--ink);color:var(--cream);}
+.crop-dialog .enhance-control {display:grid;gap:0;margin:4px 0;font-weight:600;}
+.enhance-control span {display:flex;justify-content:space-between;}
+.enhance-control output {font-variant-numeric:tabular-nums;}
+.crop-dialog .enhance-control input {width:100%;min-height:44px;margin:0;padding:0;accent-color:var(--ink);}
 :where(button,select,textarea,summary) {min-height:44px;}
 :where(button,summary) {min-width:44px;}
 button {font-weight:600;}

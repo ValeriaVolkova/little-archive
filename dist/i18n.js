@@ -123,7 +123,7 @@ photoHint:['Оригинал хранится отдельно. Поворот �
 cropInstructions:['Перемещайте рамку или потяните за угол. Разведите два пальца для увеличения.','Drag the frame or a corner. Spread two fingers to zoom in.',"Arrastra el marco o una esquina. Separa dos dedos para ampliar."],
 cropLegacy:['Эта фотография была обработана раньше. Новую рамку можно выбрать на оригинале.','This photo has an earlier edit. Choose a new crop on the original.',"Esta foto ya tiene una edición. El nuevo recorte se aplica sobre la foto original."],
 cropDone:['Готово','Done',"Listo"],cropSkip:['Пропустить','Skip',"Omitir"],cropReset:['Сбросить','Reset',"Restablecer"],
-enhance:['Улучшить','Enhance','Mejorar'],
+enhance:['Улучшение','Enhancement','Mejora'],
 zoomIn:['Увеличить','Zoom in',"Acercar"],zoomOut:['Уменьшить','Zoom out',"Alejar"],
 crop:['Обрезать','Crop',"Recortar"],apply:['Применить','Apply',"Aplicar"],cropHint:['Потяните рамку на фотографии. Оригинал сохранится.','Drag a rectangle on the photo. The original is preserved.',"Dibuja un rectángulo sobre la foto. Se conserva el original."],
 noAlbum:['Для этого ребёнка пока нет альбомов.','This child has no albums yet.',"Todavía no hay álbumes para este perfil."],busyClose:['Дождитесь окончания операции.','Please wait for the operation to finish.',"Espera a que termine la operación."],

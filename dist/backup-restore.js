@@ -1,5 +1,5 @@
 import {mergeArchives,validateArchive,profilePhoto} from './domain.js';
-import {loadImage,raster,UnreadableImageError} from './media.js';
+import {enhancementLevel,loadImage,raster,UnreadableImageError} from './media.js';
 import {checkZipLimit,readZip,writeZip} from './zip.js';
 import {readStoredFile} from './db.js';
 import {decodeImage} from './storage-codec.js';
@@ -87,7 +87,7 @@ export async function inspectBackup(file,onProgress=()=>{}){
       await checkPhoto(path);
     }
     const display=verifiedFiles.get(image.editedPath||image.originalPath);
-    verifiedFiles.set(image.originalPath+'.thumb',(await raster(display,640,0,null,image.autoEnhance===true)).blob);
+    verifiedFiles.set(image.originalPath+'.thumb',(await raster(display,640,0,null,enhancementLevel(image))).blob);
     onProgress(++done,incoming.images.length);
   }
   // Extra v1 entries are not imported, but their checksums still matter.
@@ -175,7 +175,7 @@ export async function planRestore(current,incoming,verifiedFiles){
         }
       }
       const thumb=old.originalPath+'.thumb';
-      if(!await localPhoto(thumb))puts.push([thumb,(await raster(display,640,0,null,old.autoEnhance===true)).blob]);
+      if(!await localPhoto(thumb))puts.push([thumb,(await raster(display,640,0,null,enhancementLevel(old))).blob]);
     }
   }
   const metadataChanged=['children','artworks','images','albums'].some(key=>archive[key].length!==current[key].length);

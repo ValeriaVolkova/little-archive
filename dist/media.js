@@ -37,40 +37,100 @@ const paperLift=Uint8Array.from({length:256},(_,value)=>{
   const light=value/255;
   return Math.round(190*light**3*(1-light));
 });
-function brightenPaper(ctx){
+// This anchor exactly reproduces the original on/off recipe.
+export const legacyIntensity=30;
+export function enhancementLevel(meta){
+  const value=meta.enhanceIntensity;
+  return Number.isInteger(value)&&value>=0&&value<=100?value:meta.autoEnhance===true?legacyIntensity:0;
+}
+
+// A local upper quartile measures the paper while ignoring thin darker strokes.
+// A fixed normalized grid makes this estimate independent of the export resolution.
+function paperGrid(canvas){
+  const size=8, sample=document.createElement('canvas');
+  sample.width=sample.height=size*6;
+  try{
+    const ctx=sample.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(canvas,0,0,sample.width,sample.height);
+    const pixels=ctx.getImageData(0,0,sample.width,sample.height).data;
+    const grid=new Float32Array(size*size);
+    for(let gy=0;gy<size;gy++)for(let gx=0;gx<size;gx++){
+      const values=[];
+      for(let y=Math.max(0,gy*6-3);y<Math.min(sample.height,gy*6+9);y++)
+        for(let x=Math.max(0,gx*6-3);x<Math.min(sample.width,gx*6+9);x++){
+          const i=(y*sample.width+x)*4;
+          values.push((54*pixels[i]+183*pixels[i+1]+19*pixels[i+2])/256);
+        }
+      values.sort((a,b)=>a-b);
+      grid[gy*size+gx]=Math.max(125,Math.min(246,values[Math.floor(values.length*.75)]));
+    }
+    return grid;
+  }finally{sample.width=sample.height=0;}
+}
+
+function brightenPaper(ctx,level){
   const {width,height}=ctx.canvas;
-  // Limit temporary pixel memory even for a large image being shared.
+  const grid=level>legacyIntensity?paperGrid(ctx.canvas):null;
+  const mix=grid?(level-legacyIntensity)/(100-legacyIntensity):level/legacyIntensity;
+  const upperRow=new Float32Array(8);
+  const xPosition=Float32Array.from({length:width},(_,x)=>Math.max(0,Math.min(7,(x+.5)*8/width-.5)));
   for(let y=0;y<height;y+=128){
     const strip=ctx.getImageData(0,y,width,Math.min(128,height-y));
     const pixels=strip.data;
-    for(let i=0;i<pixels.length;i+=4){
-      const r=pixels[i],g=pixels[i+1],b=pixels[i+2];
-      const high=Math.max(r,g,b),chroma=high-Math.min(r,g,b);
-      const light=(54*r+183*g+19*b)>>8;
-      const lift=Math.min(255-high,Math.round(paperLift[light]*Math.max(0,1-chroma/96)));
-      pixels[i]+=lift;pixels[i+1]+=lift;pixels[i+2]+=lift;
+    for(let row=0;row<strip.height;row++){
+      if(grid){
+        const pos=Math.max(0,Math.min(7,(y+row+.5)*8/height-.5));
+        const a=Math.floor(pos),b=Math.min(7,a+1);
+        for(let k=0;k<8;k++)upperRow[k]=grid[a*8+k]+(grid[b*8+k]-grid[a*8+k])*(pos-a);
+      }
+      for(let x=0;x<width;x++){
+        const i=(row*width+x)*4,r=pixels[i],g=pixels[i+1],b=pixels[i+2];
+        const high=Math.max(r,g,b),chroma=high-Math.min(r,g,b);
+        const light=(54*r+183*g+19*b)>>8;
+        const legacyLift=Math.min(255-high,Math.round(paperLift[light]*Math.max(0,1-chroma/96)));
+        if(!grid){
+          const lift=Math.round(legacyLift*mix);
+          pixels[i]+=lift;pixels[i+1]+=lift;pixels[i+2]+=lift;
+          continue;
+        }
+        const pos=xPosition[x],left=Math.floor(pos);
+        const paper=upperRow[left]+(upperRow[Math.min(7,left+1)]-upperRow[left])*(pos-left);
+        // Map local paper to 246. Keep headroom above paper and deepen
+        // strokes below it. Taper correction for ink and saturated pigments.
+        const target=light>paper?246+(light-paper)*9/(255-paper):246-(paper-light)*1.30;
+        const weight=Math.min(1,(light/paper)**2)*Math.max(.12,1-chroma/170);
+        const shift=(target-light)*weight;
+        const saturation=.08*Math.min(1,chroma/65);
+        for(let channel=0;channel<3;channel++){
+          const input=pixels[i+channel];
+          const maximum=Math.max(0,Math.min(255,input+shift+(input-light)*saturation));
+          pixels[i+channel]=input+legacyLift+(maximum-input-legacyLift)*mix;
+        }
+      }
     }
     ctx.putImageData(strip,0,y);
   }
 }
-export function enhancedPreview(image,max){
-  const scale=Math.min(1,max/Math.max(image.naturalWidth,image.naturalHeight));
+export function enhancedPreview(image,max,level=legacyIntensity,crop=null){
+  const rect=crop||{x:0,y:0,w:1,h:1};
+  const sw=rect.w*image.naturalWidth,sh=rect.h*image.naturalHeight;
+  const scale=Math.min(1,max/Math.max(sw,sh));
   const canvas=document.createElement('canvas');
-  canvas.width=Math.max(1,Math.round(image.naturalWidth*scale));
-  canvas.height=Math.max(1,Math.round(image.naturalHeight*scale));
+  canvas.width=Math.max(1,Math.round(sw*scale));canvas.height=Math.max(1,Math.round(sh*scale));
   const ctx=canvas.getContext('2d',{willReadFrequently:true});
-  ctx.drawImage(image,0,0,canvas.width,canvas.height);
-  brightenPaper(ctx);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(image,rect.x*image.naturalWidth,rect.y*image.naturalHeight,sw,sh,0,0,canvas.width,canvas.height);
+  if(level)brightenPaper(ctx,level);
   return canvas;
 }
-export async function raster(blob,max=1600,rotation=0,crop=null,enhance=false){
+export async function raster(blob,max=1600,rotation=0,crop=null,level=0){
   const image=blob instanceof HTMLImageElement?blob:await loadImage(blob),sw=crop?crop.w*image.naturalWidth:image.naturalWidth,sh=crop?crop.h*image.naturalHeight:image.naturalHeight;
   const scale=Math.min(1,max/Math.max(sw,sh)),w=Math.max(1,Math.round(sw*scale)),h=Math.max(1,Math.round(sh*scale)),canvas=document.createElement('canvas');
   const sideways=Math.abs(rotation%180)===90;canvas.width=sideways?h:w;canvas.height=sideways?w:h;
   const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(rotation*Math.PI/180);
   if(crop)ctx.drawImage(image,crop.x*image.naturalWidth,crop.y*image.naturalHeight,sw,sh,-w/2,-h/2,w,h);else ctx.drawImage(image,-w/2,-h/2,w,h);
   try{
-    if(enhance)brightenPaper(ctx);
+    if(level)brightenPaper(ctx,level);
     const result=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Cannot encode image')),'image/jpeg',0.92));
     return {blob:result,width:canvas.width,height:canvas.height};
   }finally{canvas.width=canvas.height=0;}
