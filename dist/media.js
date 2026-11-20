@@ -1,8 +1,12 @@
 import {validDate,today} from './domain.js';
 
+export class UnreadableImageError extends Error {
+  constructor(cause){super('Invalid image',{cause});}
+}
+
 async function nativeImage(blob){
   const url=URL.createObjectURL(blob);
-  try{return await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=()=>reject(Error('Invalid image'));image.src=url;});}
+  try{return await new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>resolve(image);image.onerror=event=>reject(new UnreadableImageError(event));image.src=url;});}
   finally{URL.revokeObjectURL(url);}
 }
 async function heifType(blob){
@@ -14,9 +18,17 @@ async function heifType(blob){
 export async function loadImage(blob){
   try{return await nativeImage(blob);}
   catch(error){
-    if(!await heifType(blob))throw error;
+    if(!(error instanceof UnreadableImageError)||!await heifType(blob))throw error;
     const {heicTo}=await import('./vendor/heic-to.js');
-    return nativeImage(await heicTo({blob,type:'image/png'}));
+    let converted;
+    try{converted=await heicTo({blob,type:'image/png'});}
+    catch(cause){
+      if(cause?.code==='HEIF_INVALID_INPUT')throw new UnreadableImageError(cause);
+      throw cause;
+    }
+    // A failure displaying the decoder's PNG says nothing about the original.
+    try{return await nativeImage(converted);}
+    catch(cause){throw new Error('Could not display decoded HEIF',{cause});}
   }
 }
 // Lift light paper more than dark strokes. The smooth shoulder leaves room

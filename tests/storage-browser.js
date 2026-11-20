@@ -2,7 +2,7 @@ const pages=new URLSearchParams(location.search).has('pages');
 const base=pages?'/little-archive/':'/dist/';
 const {openDB,readArchive,readFile,readDrafts,saveDraft,commit}=await import(base+'db.js');
 const {createBackup,inspectBackup,planRestore}=await import(base+'backup-restore.js');
-const {readZip}=await import(base+'zip.js');
+const {readZip,writeZip}=await import(base+'zip.js');
 
 const passed=JSON.parse(sessionStorage.getItem('passed')||'[]');
 const assert=(value,message)=>{if(!value)throw Error(message);};
@@ -21,6 +21,7 @@ const change=async(db,stores,callback)=>{
   callback(tx);
   await done;
 };
+const syntheticHeic=()=>new Blob([Uint8Array.from(atob('AAAAHGZ0eXBoZWljAAAAAG1pZjFoZWljbWlhZgAAAX1tZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAABoQABAAAAAAAAAB0AAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABodmMxAAAAAA5waXRtAAAAAAABAAAA/WlwcnAAAADdaXBjbwAAAHZodmNDAQNwAAAAkAAAAAAAHvAA/P34+AAADwNgAAEAGEABDAH//wNwAAADAJAAAAMAAAMAHroCQGEAAQAqQgEBA3AAAAMAkAAAAwAAAwAeoCCBBZbq5Ka5uAhoMCAAAAMDIAAAAwAhYgABAAZEAcFzwIkAAAATY29scm5jbHgAAQANAAaAAAAAFGlzcGUAAAAAAAAAQAAAAEAAAAAoY2xhcAAAACAAAAABAAAAIAAAAAH////gAAAAAv///+AAAAACAAAAEHBpeGkAAAAAAwgICAAAABhpcG1hAAAAAAAAAAEAAQWBAgMFhAAAACVtZGF0AAAAGSgBrxOA+BDhp3/1Wo//teM8PlYuvzopDPg='),c=>c.charCodeAt(0))]);
 const originals=['one','two','three'].map(id=>'images/'+id+'/original.png');
 const names=['Old Blob','New bytes'];
 const state={
@@ -170,7 +171,80 @@ async function run(){
   await checkUnreadableExport(db,photo);
   await checkUnreadableAvatar();
   await checkRepairTransactions(db);
+  await checkHeicRepair(db);
   await report({passed});
+}
+
+async function checkHeicRepair(db){
+  const archive=structuredClone(state),heic=syntheticHeic(),png=await makeImage('image/png');
+  archive.revision=(await readArchive()).revision;
+  const path=archive.images[0].originalPath='images/one/original.heic';
+  const jpg=await makeImage('image/jpeg');
+  const jpgPath=archive.images[1].originalPath='images/two/original.jpg';
+  await commit(archive,[[path,heic],[jpgPath,jpg],[originals[2],png]]);
+  const zip=await createBackup(archive,readFile);
+  const {incoming,verifiedFiles}=await inspectBackup(zip);
+  const plan=async()=>planRestore(await readArchive(),incoming,verifiedFiles);
+  const apply=p=>commit(p.archive,p.puts,[],null,p.restore);
+  const cut=heic.slice(0,24,'image/heic');
+  const entries=await readZip(zip),corruptFiles=[];
+  for(const key of entries.names)corruptFiles.push([key,key===path?cut:await entries.get(key)]);
+  let invalid;
+  try{await inspectBackup(await writeZip(corruptFiles));}catch(error){invalid=error;}
+  assert(invalid?.cause?.code==='HEIF_INVALID_INPUT','Corrupt HEIC in a checksum-valid ZIP must reject during inspection');
+  await change(db,['files'],tx=>{
+    const files=tx.objectStore('files');
+    files.put(cut,path);files.put(new Blob(['bad jpeg'],{type:'image/jpeg'}),jpgPath);
+  });
+  const initial=await readArchive(),repair=await plan();
+  assert(repair.puts.some(([key])=>key===path),'Truncated HEIC not scheduled for repair');
+  await apply(repair);
+  equal(await bytes(await readFile(path)),await bytes(heic),'Restored HEIC bytes differ');
+  equal(await bytes(await readFile(jpgPath)),await bytes(jpg),'Restored JPEG bytes differ');
+  const fixed=await readArchive();
+  equal(fixed,{...initial,revision:initial.revision+1},'Unexpected HEIC metadata change');
+  const repeat=await plan();equal(repeat.puts.length,0,'Readable HEIC scheduled for replacement');
+  await apply(repeat);equal(await readArchive(),fixed,'Repeat import changed revision');
+  passed.push('Real HEIC decoder rejects 24-byte prefix; ZIP restores exact original and second import changes nothing');
+
+  // Each realm gets a fresh module cache and worker. Force the fallback
+  // using the truncated header even if a browser gains native HEIC support.
+  await change(db,['files'],tx=>tx.objectStore('files').put(cut,path));
+  async function snapshot(){
+    const keys=await request(db.transaction('files').objectStore('files').getAllKeys());
+    const files=[];
+    for(const key of keys)files.push([key,await bytes(await readFile(key))]);
+    return {archive:await readArchive(),files};
+  }
+  const before=await snapshot();
+  for(const fault of ['missing-module','resource','abort','io']){
+    const frame=document.createElement('iframe');
+    const moduleURL=new URL(base+'vendor/heic-to.js',location.href).href;
+    frame.srcdoc='<script type="importmap">'+JSON.stringify({imports:fault==='missing-module'
+      ?{[moduleURL]:'/tests/nonexistent-heic-module.js'}:{}})+'</script>';
+    const ready=new Promise(resolve=>frame.onload=resolve);
+    document.body.append(frame);await ready;
+    try{
+      const realm=frame.contentWindow;
+      if(fault==='io'){
+        realm.Blob.prototype.arrayBuffer=async()=>{throw new DOMException('Read failed','NotReadableError');};
+      }else if(fault!=='missing-module'){
+        realm.Worker=class {
+          constructor(){
+            if(fault==='abort')throw new DOMException('Cancelled worker startup','AbortError');
+            throw new RangeError('Worker allocation failed');
+          }
+        };
+      }
+      const restoreModule=await realm.Function('url','return import(url)')(new URL(base+'backup-restore.js',location.href).href);
+      let failure;
+      try{await apply(await restoreModule.planRestore(await readArchive(),incoming,verifiedFiles));}
+      catch(error){failure=error;}
+      equal(failure?.name,{'missing-module':'TypeError',resource:'RangeError',abort:'AbortError',io:'NotReadableError'}[fault],'Expected system failure: '+fault);
+      equal(await snapshot(),before,'System failure changed keys, bytes or metadata: '+fault);
+    }finally{frame.remove();}
+  }
+  passed.push('Unavailable HEIC module, worker allocation failure, I/O failure and abort preserve stored files and revision');
 }
 
 async function checkRepairTransactions(db){
@@ -433,7 +507,7 @@ async function checkPhaseTwo(db,photo,expected){
     input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
   };
   // Synthetic solid square encoded by pillow-heif. No personal metadata.
-  const heic=new Blob([Uint8Array.from(atob('AAAAHGZ0eXBoZWljAAAAAG1pZjFoZWljbWlhZgAAAX1tZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAABoQABAAAAAAAAAB0AAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABodmMxAAAAAA5waXRtAAAAAAABAAAA/WlwcnAAAADdaXBjbwAAAHZodmNDAQNwAAAAkAAAAAAAHvAA/P34+AAADwNgAAEAGEABDAH//wNwAAADAJAAAAMAAAMAHroCQGEAAQAqQgEBA3AAAAMAkAAAAwAAAwAeoCCBBZbq5Ka5uAhoMCAAAAMDIAAAAwAhYgABAAZEAcFzwIkAAAATY29scm5jbHgAAQANAAaAAAAAFGlzcGUAAAAAAAAAQAAAAEAAAAAoY2xhcAAAACAAAAABAAAAIAAAAAH////gAAAAAv///+AAAAACAAAAEHBpeGkAAAAAAwgICAAAABhpcG1hAAAAAAAAAAEAAQWBAgMFhAAAACVtZGF0AAAAGSgBrxOA+BDhp3/1Wo//teM8PlYuvzopDPg='),c=>c.charCodeAt(0))]);
+  const heic=syntheticHeic();
   choose(heic,'square.heic');
   const heicArchive=structuredClone(state);
   heicArchive.images[0].originalPath='images/one/original.heic';

@@ -1,5 +1,5 @@
 import {mergeArchives,validateArchive,profilePhoto} from './domain.js';
-import {loadImage,raster} from './media.js';
+import {loadImage,raster,UnreadableImageError} from './media.js';
 import {checkZipLimit,readZip,writeZip} from './zip.js';
 import {readStoredFile} from './db.js';
 import {decodeImage} from './storage-codec.js';
@@ -105,7 +105,7 @@ async function localPhoto(path){
   try{return await readablePhoto(path,blob);}
   catch(error){
     // Unexpected I/O, module loading and resource errors abort the operation.
-    if(error.message==='Invalid image'||error==='HEIF image not found'||error==='HEIF processing error')return null;
+    if(error instanceof UnreadableImageError)return null;
     throw error;
   }
 }
