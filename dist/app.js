@@ -721,7 +721,7 @@ async function exportBackup(){
       :'backupExportFailed';
     let message=t(key);
     if(error instanceof BackupPhotoError){
-      message=error.workLabel?t('backupWorkUnreadable').replace('{work}',()=>error.workLabel):t('backupPhotoUnreadable');
+      message=t(error.messageKey).replace('{owner}',()=>error.label);
     }
     showModal(modalHeader(t('error'))+'<div class="modal-body"><p role="alert">'+e(message)+'</p></div>',{narrow:true});
   }

@@ -3,35 +3,46 @@ import {loadImage,raster} from './media.js';
 import {checkZipLimit,readZip,writeZip} from './zip.js';
 
 export class BackupPhotoError extends Error {
-  constructor(work,cause){
-    super('Unreadable backup photo',{cause});
-    this.workLabel=work?.title?.trim()||work?.id||'';
+  constructor(owner,cause){
+    super('Cannot export backup photo',{cause});
+    this.messageKey=owner.key;
+    this.label=owner.label;
   }
 }
 
 export async function createBackup(state,getFile,onProgress){
   const snapshot=structuredClone(state);
   delete snapshot.revision;
+  // ZIP v1 requires a name. Identify an invalid avatar owner before the
+  // general metadata check, without inventing a name in the manifest.
+  if(Array.isArray(snapshot.children)){
+    for(const child of snapshot.children){
+      if(child&&profilePhoto(child)&&(typeof child.name!=='string'||!child.name.trim())){
+        throw new BackupPhotoError({key:'backupProfileMissingName',label:child.id});
+      }
+    }
+  }
   validateArchive(snapshot,{allowInvalidDates:true});
   const manifest={format:'little-archive',formatVersion:1,exportedAt:new Date().toISOString(),archive:snapshot};
   const files=[['manifest.json',new Blob([JSON.stringify(manifest)],{type:'application/json'})]];
   checkZipLimit('manifest',files[0][1].size);
   const works=new Map(snapshot.artworks.map(work=>[work.id,work]));
   const owners=new Map();
-  function addPhoto(path,work){
-    owners.set(path,work);
+  function addPhoto(path,owner){
+    owners.set(path,owner);
     files.push([path,async()=>{
       try{return await getFile(path);}
-      catch(error){throw new BackupPhotoError(work,error);}
+      catch(error){throw new BackupPhotoError(owner,error);}
     }]);
   }
   for(const child of snapshot.children){
     const path=profilePhoto(child);
-    if(path)addPhoto(path);
+    if(path)addPhoto(path,{key:'backupPhotoUnreadable',label:child.name.trim()});
   }
   for(const image of snapshot.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
-      addPhoto(path,works.get(image.artworkId));
+      const work=works.get(image.artworkId);
+      addPhoto(path,{key:'backupWorkUnreadable',label:work.title.trim()||work.id});
     }
   }
   return writeZip(files,onProgress,async(path,blob)=>{

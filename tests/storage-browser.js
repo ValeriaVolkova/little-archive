@@ -168,6 +168,7 @@ async function run(){
   await checkPhaseTwo(db,photo,expected);
   await checkExportRefusal(db);
   await checkUnreadableExport(db,photo);
+  await checkUnreadableAvatar();
   await report({passed});
 }
 
@@ -221,6 +222,38 @@ async function checkUnreadableExport(db,good){
     for(const [i,path] of paths.entries())equal(await bytes(await readFile(path)),contents[i],'Failed decode changed stored bytes');
   }
   passed.push('Mixed valid PNG and empty or three-byte original: named failure without download, mutation or success');
+}
+
+async function checkUnreadableAvatar(){
+  const collection=await readArchive(),child=collection.children[1];
+  child.name='Luz <A> $&';
+  const path='profiles/'+child.id+'/avatar.jpg';
+  child.profileImagePath=path;
+  const damaged=new Blob([Uint8Array.of(1,2,3)],{type:'image/jpeg'});
+  await commit(collection,[[path,damaged]]);
+  const before=await readArchive(),frame=appFrame();
+  const find=selector=>waitFor(()=>frame.contentDocument?.querySelector(selector));
+  (await find('.mobile-nav [data-page=settings]')).click();
+  let downloads=0;
+  frame.contentDocument.addEventListener('click',event=>{
+    if(event.target.closest('a[download]')){downloads++;event.preventDefault();}
+  },true);
+  for(const [lang,message] of [
+    ['ru','Не удалось прочитать фотографию профиля «Luz <A> $&». ZIP не создан.'],
+    ['en','Could not read the profile photo for “Luz <A> $&”. No ZIP was created.'],
+    ['es','No se pudo leer la foto del perfil «Luz <A> $&». No se ha creado el ZIP.']
+  ]){
+    (await find('[data-language='+lang+']')).click();
+    (await find('[data-action=export]')).click();
+    equal((await find('.modal-body [role=alert]')).textContent,message,'Wrong avatar owner or language');
+    assert(!frame.contentDocument.querySelector('#toast.show'),'Unexpected success');
+    (await find('.modal-header [data-action=close]')).click();
+  }
+  frame.remove();
+  equal(downloads,0,'Damaged avatar started a download');
+  equal(await readArchive(),before,'Export changed metadata');
+  equal(await bytes(await readFile(path)),[1,2,3],'Export changed damaged avatar');
+  passed.push('Corrupt avatar identifies the correct child in RU/EN/ES before download and preserves the archive');
 }
 
 async function checkExportRefusal(db){

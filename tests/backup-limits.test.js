@@ -7,6 +7,20 @@ import {BackupLimitError,zipLimits,readZip,writeZip} from '../dist/zip.js';
 const limitError=limit=>error=>error instanceof BackupLimitError&&error.limit===limit;
 const noFile=()=>assert.fail('Export read an unexpected image');
 
+test('an unnamed profile with a corrupt avatar is identified by ID before any file read',async()=>{
+  const path='profiles/child/avatar.jpg';
+  const files=new Map([[path,new Blob([Uint8Array.of(1,2,3)],{type:'image/jpeg'})]]);
+  for(const name of [undefined,'','  ']){
+    const archive=emptyArchive();
+    archive.children.push({id:'child',name,birthDate:null,color:'#123456',profileImagePath:path});
+    let reads=0;
+    await assert.rejects(createBackup(archive,key=>{reads++;return files.get(key);}),
+      error=>error.messageKey==='backupProfileMissingName'&&error.label==='child');
+    assert.equal(reads,0);
+    assert.equal(archive.children[0].name,name);
+  }
+});
+
 // Use valid album descriptions including multibyte characters. exportedAt is
 // fixed-width ISO UTC, so the manifest can be sized to the byte without a clock mock.
 function sizedManifest(target){
