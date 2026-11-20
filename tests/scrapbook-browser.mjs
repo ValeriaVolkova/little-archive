@@ -132,16 +132,9 @@ try{
   await page.screenshot({path:join(output,'Crop.png'),animations:'disabled'});
   for(const width of [390,320]){
     await page.setViewportSize({width,height:844});
-    const brand=page.locator('.mobile-brand');
-    assert.equal(await brand.innerText(),'');
-    assert.equal(await brand.locator('img').getAttribute('alt'),'');
-    await brand.locator('img').evaluate(image=>image.decode());
-    const icon=await brand.locator('img').boundingBox();
-    const header=await page.locator('.topbar').boundingBox();
-    assert.equal(icon.width,icon.height);
-    assert.ok(icon.x>=header.x&&icon.y>=header.y&&icon.x+icon.width<=header.x+header.width);
-    const actions=await page.locator('.top-actions').boundingBox();
-    if(actions?.width)assert.ok(icon.x+icon.width<=actions.x);
+    assert.equal(await page.locator('.topbar img').count(),0);
+    assert.equal(await page.locator('.topbar').boundingBox(),null);
+    assert.equal(await page.locator('.mobile-nav .nav-add').isVisible(),true);
     assert.equal(await page.locator('.crop-dialog [data-op=done]').isEnabled(),true);
   }
   await page.setViewportSize({width:390,height:844});

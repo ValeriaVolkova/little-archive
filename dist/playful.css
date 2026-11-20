@@ -63,15 +63,14 @@
 .main {background:var(--cream);}
 .main::before,.panel h2::before {display:none;}
 .dashboard {gap:var(--space-4);}
-h1,h2,h3,.mobile-brand,.brand strong,.primary {font-family:var(--font-display);font-weight:700;}
+h1,h2,h3,.brand strong,.primary {font-family:var(--font-display);font-weight:700;}
 h1,h2,h3 {letter-spacing:-.025em;}
 body,.field,.field input,.field select,.field textarea,input,textarea,select,button,summary {font-family:var(--font-ui);}
 :where(button,select,input,textarea,summary):focus-visible {outline:3px solid var(--focus);outline-offset:3px;}
 .playful-motif {pointer-events:none;display:block;flex:none;}
 
 .topbar {border-radius:var(--radius);background:var(--cream);padding:8px 12px;gap:8px;min-height:56px;margin-bottom:16px;}
-.mobile-brand {font-size:20px;white-space:nowrap;line-height:1.05;}
-.mobile-brand img,.brand img {border-radius:0;object-fit:contain;}
+.brand img {border-radius:0;object-fit:contain;}
 /* Reserve the former title line so removing it does not move the sidebar navigation. */
 .sidebar .brand small {padding-block-start:22px;}
 @media(max-width:1100px){.sidebar .brand small {padding-block-start:21px;}}
@@ -101,7 +100,7 @@ body,.field,.field input,.field select,.field textarea,input,textarea,select,but
 .mobile-nav button.active .icon {color:var(--ink);}
 @media(max-width:800px){
   .main {padding-top:calc(10px + var(--top-inset));padding-bottom:calc(var(--nav-height) + 22px + var(--bottom-inset));}
-  .top-actions .global-add {display:none;}
+  .topbar {display:none;}
   .mobile-nav {display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) 62px repeat(2,minmax(0,1fr));}
   .mobile-nav .nav-add {
     place-self:center;width:56px;height:56px;margin-top:-22px;padding:0;border:2px solid var(--paper);

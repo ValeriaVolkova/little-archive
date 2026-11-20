@@ -48,14 +48,9 @@ async function testDesktopShortcuts(){
   });
   return stdout.split(/\r?\n/).filter(Boolean).sort();
 }
-async function checkHeader(page){
-  const brand=page.locator('.mobile-brand');
-  assert.equal(await brand.innerText(),'');
-  const image=brand.locator('img');
-  assert.equal(await image.getAttribute('alt'),'');
-  assert.equal(await image.getAttribute('src'),'./assets/drawkeeper-192.png');
-  await image.evaluate(element=>element.decode());
-  assert.equal(await brand.getByRole('button').count(),0);
+async function checkMobileHeader(page){
+  assert.equal(await page.locator('.topbar img').count(),0);
+  assert.equal(await page.locator('.topbar').isVisible(),false);
 }
 
 async function launch(){
@@ -139,7 +134,7 @@ try{
   const first=await app.locator('[data-build]').innerText();
   assert.deepEqual(await snapshot(app),before);
   assert.match(await app.title(),/^Drawkeeper · Little art\. Big memories\.$/);
-  await checkHeader(app);
+  await checkMobileHeader(app);
   assert.deepEqual(await testDesktopShortcuts(),installedShortcuts,'First update changed desktop shortcut names');
   const manifest=await app.evaluate(async()=> (await fetch('./manifest.webmanifest')).json());
   assert.equal(manifest.name,'Drawkeeper');assert.equal(manifest.short_name,'Drawkeeper');
@@ -214,7 +209,7 @@ try{
   const navigation=async(tab,expected)=>{
     await app.locator('.mobile-nav [data-page='+tab+']').click();
     if(expected)await app.getByRole('heading',{name:expected,exact:true}).waitFor();
-    await checkHeader(app);
+    await checkMobileHeader(app);
   };
   await app.locator('[data-language=ru]').click();
   assert.equal(await app.title(),'Drawkeeper · Маленькие рисунки. Большие воспоминания.');
@@ -252,7 +247,7 @@ try{
   assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
   await app.locator('.mobile-nav [data-page=archive]').click();
   await app.waitForFunction(()=>document.querySelector('.work-card img')?.naturalWidth>0);
-  await checkHeader(app);
+  await checkMobileHeader(app);
   await app.locator('.mobile-nav [data-page=albums]').click();
   assert.ok(await app.evaluate(async()=> (await fetch('./assets/playful-motifs.svg')).ok));
   assert.match(await app.locator('.book-jacket').first().getAttribute('class'),/jacket-lavender/);
