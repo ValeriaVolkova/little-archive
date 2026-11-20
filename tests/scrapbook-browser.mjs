@@ -76,9 +76,9 @@ try{
     assert.equal(await page.locator('.settings-intro h1').textContent(),title);
     const layout=await page.evaluate(()=>{
       const rect=selector=>document.querySelector(selector).getBoundingClientRect();
-      const nav=rect('.mobile-nav'),add=rect('.nav-add'),topbar=rect('.topbar'),main=getComputedStyle(document.querySelector('.main'));
+      const nav=rect('.mobile-nav'),add=rect('.nav-add'),intro=rect('.settings-intro'),main=getComputedStyle(document.querySelector('.main'));
       return {
-        top:topbar.top,bottom:innerHeight-nav.bottom,padding:parseFloat(main.paddingBottom),navHeight:nav.height,
+        top:intro.top,bottom:innerHeight-nav.bottom,padding:parseFloat(main.paddingBottom),navHeight:nav.height,
         overflow:document.documentElement.scrollWidth>innerWidth,
         centered:Math.abs(add.left+add.width/2-innerWidth/2)<1&&add.top<nav.top,
         targets:[...document.querySelectorAll('.mobile-nav button,.settings-actions button,.language-options button')]
