@@ -14,7 +14,7 @@ export function checkZipLimit(limit,value){
   if(value>zipLimits[limit])throw new BackupLimitError(limit);
 }
 // A backup can supply readers so path/count checks run before opening files.
-export async function writeZip(files,onProgress=()=>{}){
+export async function writeZip(files,onProgress=()=>{},validateEntry){
   checkZipLimit('entries',files.length);
   const names=new Set();
   let total=22,directory=0;
@@ -37,6 +37,7 @@ export async function writeZip(files,onProgress=()=>{}){
   }
   let offset=0;const parts=[],central=[];let index=0;
   for(const [name,blob]of entries){
+    if(validateEntry)await validateEntry(name,blob);
     const bytes=encoder.encode(name),crc=await crc32(blob),{data,v}=header(30);
     v.setUint32(0,0x04034b50,true);v.setUint16(4,20,true);v.setUint16(6,0x800,true);v.setUint32(14,crc,true);v.setUint32(18,blob.size,true);v.setUint32(22,blob.size,true);v.setUint16(26,bytes.length,true);
     parts.push(data,bytes,blob);

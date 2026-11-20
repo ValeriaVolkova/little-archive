@@ -2,6 +2,13 @@ import {mergeArchives,validateArchive,profilePhoto} from './domain.js';
 import {loadImage,raster} from './media.js';
 import {checkZipLimit,readZip,writeZip} from './zip.js';
 
+export class BackupPhotoError extends Error {
+  constructor(work,cause){
+    super('Unreadable backup photo',{cause});
+    this.workLabel=work?.title?.trim()||work?.id||'';
+  }
+}
+
 export async function createBackup(state,getFile,onProgress){
   const snapshot=structuredClone(state);
   delete snapshot.revision;
@@ -9,19 +16,38 @@ export async function createBackup(state,getFile,onProgress){
   const manifest={format:'little-archive',formatVersion:1,exportedAt:new Date().toISOString(),archive:snapshot};
   const files=[['manifest.json',new Blob([JSON.stringify(manifest)],{type:'application/json'})]];
   checkZipLimit('manifest',files[0][1].size);
+  const works=new Map(snapshot.artworks.map(work=>[work.id,work]));
+  const owners=new Map();
+  function addPhoto(path,work){
+    owners.set(path,work);
+    files.push([path,async()=>{
+      try{return await getFile(path);}
+      catch(error){throw new BackupPhotoError(work,error);}
+    }]);
+  }
   for(const child of snapshot.children){
     const path=profilePhoto(child);
-    if(path)files.push([path,()=>getFile(path)]);
+    if(path)addPhoto(path);
   }
   for(const image of snapshot.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
-      files.push([path,()=>getFile(path)]);
+      addPhoto(path,works.get(image.artworkId));
     }
   }
-  return writeZip(files,onProgress);
+  return writeZip(files,onProgress,async(path,blob)=>{
+    if(!owners.has(path))return;
+    try{await readablePhoto(path,blob);}
+    catch(error){throw new BackupPhotoError(owners.get(path),error);}
+  });
 }
 
 const imageTypes={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',webp:'image/webp',heic:'image/heic',heif:'image/heif'};
+
+async function readablePhoto(path,blob){
+  const typed=blob.slice(0,blob.size,imageTypes[path.split('.').at(-1)]);
+  await loadImage(typed);
+  return typed;
+}
 
 export async function inspectBackup(file,onProgress=()=>{}){
   const zip=await readZip(file),manifestBlob=await zip.get('manifest.json','manifest');
@@ -31,17 +57,13 @@ export async function inspectBackup(file,onProgress=()=>{}){
   for(const child of incoming.children){
     const path=profilePhoto(child);
     if(path){
-      const image=new Blob([await zip.get(path)],{type:'image/jpeg'});
-      await loadImage(image);verifiedFiles.set(path,image);
+      verifiedFiles.set(path,await readablePhoto(path,await zip.get(path)));
     }
   }
   let done=0;
   for(const image of incoming.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
-      const blob=await zip.get(path);
-      const typed=new Blob([blob],{type:imageTypes[path.split('.').at(-1)]});
-      await loadImage(typed);
-      verifiedFiles.set(path,typed);
+      verifiedFiles.set(path,await readablePhoto(path,await zip.get(path)));
     }
     const display=verifiedFiles.get(image.editedPath||image.originalPath);
     verifiedFiles.set(image.originalPath+'.thumb',(await raster(display,640,0,null,image.autoEnhance===true)).blob);

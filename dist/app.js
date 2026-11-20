@@ -5,7 +5,7 @@ import {editCrop} from './crop-editor.js';
 import {storageErrorKey} from './storage-error.js';
 import {draftQueue} from './draft-queue.js';
 import {emptyArchive,today,validDate,ageAt,albumMembers,profilePhoto,childAlbums,archiveFilters,dashboardData,filterWorks,deleteWork,validateArchive,categories,displayCategory,workCategory} from './domain.js';
-import {createBackup,inspectBackup,planRestore} from './backup-restore.js';
+import {BackupPhotoError,createBackup,inspectBackup,planRestore} from './backup-restore.js';
 import {BackupLimitError} from './zip.js';
 import {readArchive,readFile,commit,clientId,readDrafts,saveDraft} from './db.js';
 import {appName,languages,localizeDocument,t,lang,setLanguage,dateText,countText,ageText,periodText} from './i18n.js';
@@ -719,7 +719,11 @@ async function exportBackup(){
     const key=error instanceof BackupLimitError
       ?(error.limit==='manifest'?'backupManifestTooLarge':'backupTooLarge')
       :'backupExportFailed';
-    showModal(modalHeader(t('error'))+'<div class="modal-body"><p role="alert">'+e(t(key))+'</p></div>',{narrow:true});
+    let message=t(key);
+    if(error instanceof BackupPhotoError){
+      message=error.workLabel?t('backupWorkUnreadable').replace('{work}',()=>error.workLabel):t('backupPhotoUnreadable');
+    }
+    showModal(modalHeader(t('error'))+'<div class="modal-body"><p role="alert">'+e(message)+'</p></div>',{narrow:true});
   }
 }
 async function importBackup(file){
@@ -734,9 +738,9 @@ async function importBackup(file){
         if(demonstration){await commit(next,puts,[],null,missingOriginals);demonstration=false;state=realState=next;clearURLs();}
         else await persist(next,puts,[],null,missingOriginals);
         busy=false;closeModal(true);openArchive();toast(t('imported'));
-      }catch{inlineError(t('invalidBackup'));}finally{busy=false;}
+      }catch{inlineError(t('restoreFailed'));}finally{busy=false;}
     }});
-  }catch(error){busy=false;showModal(modalHeader(t('error'))+'<div class="modal-body"><p class="help">'+e(t(error instanceof BackupLimitError?'backupTooLarge':'invalidBackup'))+'</p></div>',{narrow:true});}
+  }catch(error){busy=false;showModal(modalHeader(t('error'))+'<div class="modal-body"><p class="help" role="alert">'+e(t(error instanceof BackupLimitError?'restoreTooLarge':'invalidBackup'))+'</p></div>',{narrow:true});}
 }
 const backupInput=document.createElement('input');backupInput.type='file';backupInput.accept='.zip,application/zip';backupInput.hidden=true;document.body.append(backupInput);backupInput.onchange=()=>{if(backupInput.files[0])importBackup(backupInput.files[0]);backupInput.value='';};
 app.onclick=async event=>{

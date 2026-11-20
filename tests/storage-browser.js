@@ -61,6 +61,8 @@ async function run(){
   const expected=await bytes(photo);
   const db=await openDB();
   if(!sessionStorage.getItem('reopened')){
+    await checkEmptyRestoreRefusal(db);
+    sessionStorage.setItem('passed',JSON.stringify(passed));
     // Seed the original schema with actual legacy Blob records.
     const legacy={...state,artworks:[state.artworks[0]],images:state.images.slice(0,2),
       albums:[{...state.albums[0],orderedArtworkIds:['work-0']}]};
@@ -165,7 +167,60 @@ async function run(){
   passed.push('Full restore into empty test storage saves every original and record');
   await checkPhaseTwo(db,photo,expected);
   await checkExportRefusal(db);
+  await checkUnreadableExport(db,photo);
   await report({passed});
+}
+
+async function checkEmptyRestoreRefusal(db){
+  const {writeZip,zipLimits}=await import(base+'zip.js');
+  const zip=await writeZip([['manifest.json',new Blob([new Uint8Array(zipLimits.manifest+1)])]]);
+  const keys=store=>request(db.transaction(store).objectStore(store).getAllKeys());
+  const before=await readArchive();
+  const frame=appFrame(),find=selector=>waitFor(()=>frame.contentDocument?.querySelector(selector));
+  (await find('.mobile-nav [data-page=settings]')).click();
+  for(const [lang,message] of [
+    ['en','This ZIP exceeds the format limits. Nothing was restored. Your current collection is unchanged. Keep the original ZIP.'],
+    ['es','El ZIP supera los límites del formato. No se ha restaurado nada. Tu colección actual sigue intacta. Conserva el ZIP original.'],
+    ['ru','ZIP превышает ограничения формата. Восстановление не выполнено. Текущая коллекция не изменилась. Сохраните исходный ZIP.']
+  ]){
+    (await find('[data-language='+lang+']')).click();
+    const input=await find('input[accept*=".zip"]'),transfer=new DataTransfer();
+    transfer.items.add(new File([zip],'large.zip'));input.files=transfer.files;
+    input.dispatchEvent(new Event('change'));
+    equal((await find('.modal-body [role=alert]')).textContent,message,'Wrong restore result');
+    assert(!frame.contentDocument.querySelector('#toast.show,[data-action=merge]'),'Restore reported success or offered merge');
+    (await find('.modal-header [data-action=close]')).click();
+  }
+  equal(await readArchive(),before,'Refusal changed archive');
+  equal(await keys('metadata'),[],'Refusal wrote metadata');equal(await keys('files'),[],'Refusal wrote files');
+  frame.remove();passed.push('Oversize ZIP restore into empty storage reports no restore in EN/ES/RU and writes no records');
+}
+
+async function checkUnreadableExport(db,good){
+  const collection=structuredClone(state);
+  collection.images=collection.images.filter(image=>image.id!=='two');
+  collection.artworks[1].title='<Unfinished> $&';
+  collection.revision=(await readArchive()).revision;
+  for(const bad of [new Blob([],{type:'image/png'}),new Blob([Uint8Array.of(1,2,3)],{type:'image/png'})]){
+    await commit(collection,[[originals[0],good],[originals[2],bad]]);
+    const before=await readArchive();
+    const keys=()=>request(db.transaction('files').objectStore('files').getAllKeys());
+    const paths=await keys(),contents=await Promise.all(paths.map(async path=>bytes(await readFile(path))));
+    const frame=appFrame(),find=selector=>waitFor(()=>frame.contentDocument?.querySelector(selector));
+    (await find('.mobile-nav [data-page=settings]')).click();
+    (await find('[data-language=ru]')).click();
+    let downloads=0;
+    frame.contentDocument.addEventListener('click',event=>{
+      if(event.target.closest('a[download]')){downloads++;event.preventDefault();}
+    },true);
+    (await find('[data-action=export]')).click();
+    equal((await find('.modal-body [role=alert]')).textContent,'Не удалось прочитать фотографию работы «<Unfinished> $&». ZIP не создан.','Missing work in error');
+    assert(!downloads&&!frame.contentDocument.querySelector('#toast.show'),'Invalid original produced a download or success');
+    frame.remove();equal(await readArchive(),before,'Failed decode changed metadata');
+    equal(await keys(),paths,'Failed decode changed file keys');
+    for(const [i,path] of paths.entries())equal(await bytes(await readFile(path)),contents[i],'Failed decode changed stored bytes');
+  }
+  passed.push('Mixed valid PNG and empty or three-byte original: named failure without download, mutation or success');
 }
 
 async function checkExportRefusal(db){
@@ -262,6 +317,14 @@ async function checkPhaseTwo(db,photo,expected){
   // Synthetic solid square encoded by pillow-heif. No personal metadata.
   const heic=new Blob([Uint8Array.from(atob('AAAAHGZ0eXBoZWljAAAAAG1pZjFoZWljbWlhZgAAAX1tZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAABoQABAAAAAAAAAB0AAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABodmMxAAAAAA5waXRtAAAAAAABAAAA/WlwcnAAAADdaXBjbwAAAHZodmNDAQNwAAAAkAAAAAAAHvAA/P34+AAADwNgAAEAGEABDAH//wNwAAADAJAAAAMAAAMAHroCQGEAAQAqQgEBA3AAAAMAkAAAAwAAAwAeoCCBBZbq5Ka5uAhoMCAAAAMDIAAAAwAhYgABAAZEAcFzwIkAAAATY29scm5jbHgAAQANAAaAAAAAFGlzcGUAAAAAAAAAQAAAAEAAAAAoY2xhcAAAACAAAAABAAAAIAAAAAH////gAAAAAv///+AAAAACAAAAEHBpeGkAAAAAAwgICAAAABhpcG1hAAAAAAAAAAEAAQWBAgMFhAAAACVtZGF0AAAAGSgBrxOA+BDhp3/1Wo//teM8PlYuvzopDPg='),c=>c.charCodeAt(0))]);
   choose(heic,'square.heic');
+  const heicArchive=structuredClone(state);
+  heicArchive.images[0].originalPath='images/one/original.heic';
+  const jpegPath='images/two/original.jpg';
+  heicArchive.images[1].originalPath=jpegPath;
+  const supported=new Map([[heicArchive.images[0].originalPath,heic],[jpegPath,await makeImage('image/jpeg')],[originals[2],photo]]);
+  const checked=await inspectBackup(await createBackup(heicArchive,path=>supported.get(path)));
+  for(const [path,file] of supported)equal(await bytes(checked.verifiedFiles.get(path)),await bytes(file),'Format round trip changed original');
+  passed.push('HEIC, JPEG and PNG pass the same export/import decoder and retain their bytes');
   await click('.crop-dialog [data-op=rotate]');
   await click('.crop-dialog [data-op=done]');
   await waitFor(()=>!query('.crop-dialog'));
