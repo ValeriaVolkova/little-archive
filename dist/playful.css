@@ -137,7 +137,7 @@ body,.field,.field input,.field select,.field textarea,input,textarea,select,but
   position:relative;isolation:isolate;overflow:hidden;padding:15px 18px;
   min-height:118px;background:var(--yellow);border:1px solid var(--line);border-radius:var(--radius-lg);
 }
-.collection-summary h1 {font-size:18px;margin:0 0 7px;}
+.collection-summary h2 {font-size:18px;margin:0 0 7px;}
 .collection-summary p {font:700 clamp(28px,8vw,38px)/1.15 var(--font-ui);margin:0;max-width:75%;}
 .collection-pattern {
   position:absolute;top:0;right:-17px;width:clamp(92px,29%,150px);

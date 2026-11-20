@@ -341,7 +341,7 @@ async function checkEmptyRestoreRefusal(db){
   const keys=store=>request(db.transaction(store).objectStore(store).getAllKeys());
   const before=await readArchive();
   const frame=appFrame(),find=selector=>waitFor(()=>frame.contentDocument?.querySelector(selector));
-  (await find('.mobile-nav [data-page=settings]')).click();
+  (await find('.app-tools .settings-shortcut')).click();
   for(const [lang,message] of [
     ['en','This ZIP exceeds the format limits. Nothing was restored. Your current collection is unchanged. Keep the original ZIP.'],
     ['es','El ZIP supera los límites del formato. No se ha restaurado nada. Tu colección actual sigue intacta. Conserva el ZIP original.'],
@@ -371,7 +371,7 @@ async function checkUnreadableExport(db,good){
     const keys=()=>request(db.transaction('files').objectStore('files').getAllKeys());
     const paths=await keys(),contents=await Promise.all(paths.map(async path=>bytes(await readFile(path))));
     const frame=appFrame(),find=selector=>waitFor(()=>frame.contentDocument?.querySelector(selector));
-    (await find('.mobile-nav [data-page=settings]')).click();
+    (await find('.app-tools .settings-shortcut')).click();
     (await find('[data-language=ru]')).click();
     let downloads=0;
     frame.contentDocument.addEventListener('click',event=>{
@@ -396,7 +396,7 @@ async function checkUnreadableAvatar(){
   await commit(collection,[[path,damaged]]);
   const before=await readArchive(),frame=appFrame();
   const find=selector=>waitFor(()=>frame.contentDocument?.querySelector(selector));
-  (await find('.mobile-nav [data-page=settings]')).click();
+  (await find('.app-tools .settings-shortcut')).click();
   let downloads=0;
   frame.contentDocument.addEventListener('click',event=>{
     if(event.target.closest('a[download]')){downloads++;event.preventDefault();}
@@ -434,7 +434,7 @@ async function checkExportRefusal(db){
   frame.contentDocument.addEventListener('click',event=>{
     if(event.target.closest('a[download]')){downloads++;event.preventDefault();}
   },true);
-  (await find('.mobile-nav [data-page=settings]')).click();
+  (await find('.app-tools .settings-shortcut')).click();
   for(const [language,phrase] of [['ru','ZIP не создан'],['en','No ZIP was created'],['es','No se ha creado el ZIP']]){
     (await find('[data-language='+language+']')).click();
     (await find('[data-action=export]')).click();
@@ -456,7 +456,7 @@ async function checkPhaseTwo(db,photo,expected){
   const doc=()=>frame.contentDocument;
   const query=selector=>doc()?.querySelector(selector);
   const click=async selector=>(await waitFor(()=>query(selector))).click();
-  const nav=page=>click('.mobile-nav [data-page="'+page+'"]');
+  const nav=page=>click(page==='settings'?'.app-tools .settings-shortcut':'.mobile-nav [data-page="'+page+'"]');
   const value=(input,next)=>{
     input.value=next;
     input.dispatchEvent(new Event('input',{bubbles:true}));
@@ -465,25 +465,25 @@ async function checkPhaseTwo(db,photo,expected){
   await waitFor(()=>query('.archive-home'));
   assert(query('.mobile-nav [aria-current=page]').dataset.page==='archive','Initial tab was not Archive');
   equal([...doc().querySelectorAll('.mobile-nav button')].map(el=>el.dataset.page||el.dataset.action),
-    ['home','archive','newWork','albums','settings'],'Five-item navigation is out of order');
-  await nav('home');
-  assert(doc().querySelectorAll('.artist-card').length===2&&query('.collection-summary p').textContent==='2 работы','Home did not count real profiles and artwork');
+    ['archive','albums','newWork','favorites','stats'],'Five-item navigation is out of order');
+  await nav('stats');
+  assert(doc().querySelectorAll('.artist-card').length===2&&query('.collection-summary p').textContent==='2 работы','Stats did not count real profiles and artwork');
   await click('.artist-card[data-id=misha]');
   assert(query('.child-tabs [data-id=misha]').getAttribute('aria-pressed')==='true','Artist did not open their Archive');
-  await nav('home');
-  assert(doc().documentElement.scrollWidth<=390,'Home overflows a 390px viewport');
+  await nav('stats');
+  assert(doc().documentElement.scrollWidth<=390,'Stats overflows a 390px viewport');
   await click('[data-action=openPeriod][data-id=misha][data-period="3"]');
   assert(query('#period-filter').value==='3','Dashboard did not apply age period');
   equal([...doc().querySelectorAll('.art-grid [data-action=detail]')].map(el=>el.dataset.id),['work-1'],'Age period returned the wrong works');
   await click('.child-tabs [data-id=aurora]');
   assert(query('#period-filter').value==='3'&&!query('.art-grid .work-card'),'Choosing a child reset the age filter');
-  await nav('home');await nav('archive');
+  await nav('stats');await nav('archive');
   assert(query('#period-filter').value==='3'&&query('.child-tabs [data-id=aurora]').getAttribute('aria-pressed')==='true','Nav lost active filters');
   await click('.archive-reset');
   assert(query('.child-tabs [data-id=""]').getAttribute('aria-pressed')==='true','Archive nav did not default to All children');
   assert(doc().querySelectorAll('.art-grid .work-card').length===2,'Family archive omitted a child');
   assert(doc().documentElement.scrollWidth<=390,'Archive overflows a 390px viewport');
-  passed.push('Start on Archive; Home counts artwork and opens the correct child or age filter');
+  passed.push('Start on Archive; Stats counts artwork and opens the correct child or age filter');
 
   await click('.art-grid [data-id=work-0][data-action=detail]');
   await click('#modal [data-action=edit]');
@@ -727,11 +727,11 @@ async function checkPhaseTwo(db,photo,expected){
   value(profile.elements.name,'Новый профиль');value(profile.elements.birthday,'2021-04-29');
   profile.querySelector('[data-action=submit]').click();
   await waitFor(()=>firstQuery('#archive-results [data-action=newWork]'));
-  firstQuery('.mobile-nav [data-page=home]').click();
-  assert(firstQuery('.artist-card')&&!firstQuery('.age-chart,.story-pair'),'Empty Home has invented statistics or artwork');
+  firstQuery('.mobile-nav [data-page=stats]').click();
+  assert(firstQuery('.artist-card')&&!firstQuery('.age-chart,.story-pair'),'Empty Stats has invented statistics or artwork');
   const firstState=await readArchive();
   assert(firstState.children.length===1&&firstState.artworks.length===0,'Onboarding mixed demo records into the archive');
-  passed.push('First opening starts on Archive, central Add creates the first profile, and empty Home has no invented data');
+  passed.push('First opening starts on Archive, central Add creates the first profile, and empty Stats has no invented data');
   first.remove();
   const merge=await planRestore(firstState,newBackup.incoming,newBackup.verifiedFiles);
   // This fixture removed only metadata. Existing unowned file keys must

@@ -8,10 +8,10 @@ import {runInNewContext} from 'node:vm';
 // Deliberate allowlist. Repository metadata, tests, ZIPs and anything newly
 // dropped into dist are excluded unless explicitly reviewed and listed here.
 const allowedFiles=[
-  'index.html','manifest.webmanifest','style.css','editorial.css','playful.css','sw.js',
+  'index.html','manifest.webmanifest','style.css','editorial.css','playful.css','bright.css','sw.js',
   'app.js','album-ux.js','pwa-update.js','backup-restore.js','db.js','domain.js','draft-queue.js','i18n.js',
   'vendor/heic-to.js','vendor/heic-to.LICENSE.txt','crop-editor.js','scrapbook.js','media.js','pdf.js','storage-codec.js','storage-error.js','ui.js','zip.js',
-  'assets/playful-motifs.svg','assets/fonts/Onest.ttf','assets/fonts/Onest-OFL.txt','assets/fish.svg','assets/flowers.svg',
+  'assets/playful-motifs.svg','assets/bright-top.svg','assets/bright-bottom.svg','assets/fonts/Onest.ttf','assets/fonts/Onest-OFL.txt','assets/fish.svg','assets/flowers.svg',
   'assets/house.svg','assets/leaf.svg','assets/rainbow.svg',
   'assets/drawkeeper-32.png','assets/drawkeeper-180.png','assets/drawkeeper-192.png','assets/drawkeeper-512.png',
   'assets/sun.svg',

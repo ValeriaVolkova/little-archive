@@ -13,6 +13,11 @@ export function setLanguage(value){
   try{localStorage.setItem(languageKey,value);}catch{/* Keep the choice for this session. */}
 }
 const words={
+stats:['Статистика','Stats','Estadísticas'],
+statsHeadline:['Место для детского творчества','A place for your child’s creativity','Un lugar para la creatividad de tus hijos'],
+appDesign:['Оформление приложения','App design','Diseño de la aplicación'],
+classic:['Классический','Classic','Clásico'],
+bright:['Яркий','Bright','Vivo'],
 myCollection:['Моя коллекция','My collection','Mi colección'],
 littleArtists:['Маленькие художники','Little artists','Pequeños artistas'],
 artByAge:['Творчество по возрастам','Art by age','Arte por edades'],

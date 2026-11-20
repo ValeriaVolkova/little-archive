@@ -130,7 +130,7 @@ try{
     await new Promise(r=>setTimeout(r,100));
   }
   app=await launch();
-  await app.locator('.mobile-nav [data-page=settings]').click();
+  await app.locator('.app-tools .settings-shortcut').click();
   const first=await app.locator('[data-build]').innerText();
   assert.deepEqual(await snapshot(app),before);
   assert.match(await app.title(),/^Drawkeeper · Little art\. Big memories\.$/);
@@ -199,7 +199,7 @@ try{
   await other.close();
   await app.locator('[data-action=applyUpdate]').click();
   await app.locator('.archive-home').waitFor();
-  await app.locator('.mobile-nav [data-page=settings]').click();
+  await app.locator('.app-tools .settings-shortcut').click();
   assert.match(await app.locator('[data-build]').innerText(),/aaaaaaaaaaaaaaaa/);
   assert.doesNotMatch(first,/aaaaaaaaaaaaaaaa/);
   assert.deepEqual(await snapshot(app),saved);
@@ -207,7 +207,7 @@ try{
   if(process.platform==='win32')console.log('PASS: Windows Desktop shortcut count remained '+installedShortcuts.length+' across two updates');
   console.log('PASS: failed download leaves old version usable; prompt, editor and other-window guards, explicit update and correct build');
   const navigation=async(tab,expected)=>{
-    await app.locator('.mobile-nav [data-page='+tab+']').click();
+    await app.locator(tab==='settings'?'.app-tools .settings-shortcut':'.mobile-nav [data-page='+tab+']').click();
     if(expected)await app.getByRole('heading',{name:expected,exact:true}).waitFor();
     await checkMobileHeader(app);
   };
@@ -217,7 +217,7 @@ try{
   await navigation('settings','Настройки');
   await app.locator('[data-language=es]').click();
   assert.equal(await app.title(),'Drawkeeper · Pequeños dibujos. Grandes recuerdos.');
-  await navigation('home','Mi colección');
+  await navigation('stats','Mi colección');
   assert.equal(await app.locator('.collection-summary p').innerText(),'3 obras');
   await navigation('archive','Archivo');
   assert.equal(await app.locator('#archive-count').innerText(),'3 obras');

@@ -17,6 +17,18 @@ const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 let state=emptyArchive(),realState,demonstration=false,page='archive',filters=archiveFilters(),busy=false,dirty=false,stale=false;
 let section=null;
 let drafts=[],draftActive=false,draftState="idle";
+const tabs=[['archive','photo'],['albums','grid'],['favorites','heart'],['stats','stats']];
+const themeKey='little-archive-theme';
+let theme='bright';
+try{if(localStorage.getItem(themeKey)==='classic')theme='classic';}catch{}
+const galleries={archive:filters,favorites:archiveFilters()};
+let galleryPage='archive';
+const isGallery=()=>Object.hasOwn(galleries,page);
+function useGalleryFilters(target,next=galleries[target]){
+  galleryPage=target;
+  filters=galleries[target]=next;
+}
+const galleryWorks=()=>filterWorks(state,page==='favorites'?{...filters,favorite:true}:filters);
 const lastChildKey='little-archive-last-child';
 function preferredChild(){
   let saved='';
@@ -26,7 +38,7 @@ function preferredChild(){
 function rememberChild(id){try{localStorage.setItem(lastChildKey,id);}catch{}}
 // One history entry per open modal, including transitions from detail to edit.
 let dismissingFromHistory=false,consumingModalEntry=false;
-function routeState(){return {archivePage:page,section,filters:{...filters},scroll:window.scrollY};}
+function routeState(){return {archivePage:page,section,galleryPage,filters:{...filters},scroll:window.scrollY};}
 function rememberRoute(){history.replaceState(routeState(),'');}
 function pushRoute(){history.pushState(routeState(),'');}
 window.addEventListener('popstate',event=>{
@@ -40,7 +52,9 @@ window.addEventListener('popstate',event=>{
   }
   const route=event.state;
   if(route?.archivePage){
-    page=route.archivePage;section=route.section||null;filters={...archiveFilters(),...route.filters};
+    page=route.archivePage==='home'?'stats':route.archivePage;section=route.section||null;
+    const gallery=Object.hasOwn(galleries,route.galleryPage)?route.galleryPage:page==='favorites'?'favorites':'archive';
+    useGalleryFilters(gallery,{...archiveFilters(),...route.filters});
     render();window.scrollTo(0,route.scroll||0);
   }
 });
@@ -48,7 +62,8 @@ let modalCleanup=()=>{},modalAction=null,toastTimer;
 const demoFiles=new Map(),urlCache=new Map(),modalUrls=[];
 const e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icons={
-home:'<path d="m3 11 9-8 9 8M5 10v10h14V10M10 20v-6h4v6"/>',
+stats:'<path d="M5 20V11m7 9V4m7 16V8"/>',
+palette:'<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.2A1.7 1.7 0 0 1 16 15h2a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><path d="M7 12h.01M9 7h.01m5-1h.01m3 4h.01"/>',
 grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
 album:'<path d="M5 3h13a2 2 0 0 1 2 2v15H6a3 3 0 0 1-3-3V5a2 2 0 0 1 2-2Zm1 0v17M3 17h17"/><path d="M10 7h6m-6 4h4"/>',
 settings:'<path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3" fill="var(--bg)"/><circle cx="16" cy="17" r="3" fill="var(--bg)"/>',
@@ -145,7 +160,6 @@ const updates=updateManager({
   }
 });
 function navigation(mobile=false){
-  const tabs=[['home','home'],['archive','grid'],['albums','album'],['settings','settings']];
   const tab=([id,symbol])=>button('nav',t(id),(mobile?'':'nav-button ')+(page===id?'active':''),symbol,
     'data-page="'+id+'" aria-current="'+(page===id?'page':'false')+'"');
   const items=tabs.map(tab);
@@ -157,13 +171,16 @@ function render(){
   stopAlbumDrag?.();stopAlbumDrag=null;
   imagesById=new Map(state.images.map(image=>[image.id,image]));
   if(filters.child&&!state.children.some(c=>c.id===filters.child))filters.child='';
-  localizeDocument();app.dataset.page=page;
+  localizeDocument();app.dataset.page=page;document.documentElement.dataset.theme=theme;
+  const settingsButton=page!=='settings'||section?button('nav','','settings-shortcut secondary','settings',
+    'data-page="settings" aria-label="'+e(t('settings'))+'"'):'';
+  const mobileTools=settingsButton?'<div class="app-tools">'+settingsButton+'</div>':'';
   app.innerHTML='<aside class="sidebar"><div class="brand"><img src="./assets/drawkeeper-192.png" alt=""><div><small>'+e(t('tagline'))+'</small></div></div>'+navigation()+
   '<div class="side-label">'+e(t('profiles'))+'</div>'+state.children.map(c=>'<button class="child-filter '+(filters.child===c.id?'selected':'')+'" data-action="childPage" data-id="'+e(c.id)+'"><span class="child-dot" style="background:'+e(c.color)+'38">'+e(c.name[0])+'</span>'+e(c.name)+'</button>').join('')+
   button('newChild',t('addChild'),'child-filter add','plus')+'<div class="side-foot">'+icon('lock')+'<div>'+e(t('local'))+'<br>'+e(t('private'))+'</div></div></aside><main class="main">'+
-  '<div class="topbar"><div class="breadcrumb">'+icon(page==='home'?'home':page==='archive'?'grid':page==='albums'?'album':'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"')+'</div></div>'+
+  '<div class="topbar"><div class="breadcrumb">'+icon(tabs.find(([id])=>page===id)?.[1]||'settings')+'<span>'+e(t(page))+'</span></div><div class="top-actions"><span class="status-pill"><i></i>'+e(t('onlyLocal'))+'</span>'+settingsButton+button('newWork','','global-add primary','plus','aria-label="'+e(t('addArtwork'))+'"')+'</div></div>'+mobileTools+
   '<section class="update-banner panel" hidden><span role="status"></span>'+button('applyUpdate',t('applyUpdate'),'secondary')+'</section>'+
-  (section?.type==='album'?albumView(section.id):section?.type==='child'?childView(section.id):{home:dashboardView,archive:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
+  (section?.type==='album'?albumView(section.id):section?.type==='child'?childView(section.id):{stats:statsView,archive:archiveView,favorites:archiveView,albums:albumsView,settings:settingsView}[page]())+'</main>'+navigation(true);
   hydrate();updates.show();
   const gallery=app.querySelector('.album-gallery');
   if(gallery)stopAlbumDrag=albumDrag(gallery,ids=>saveAlbumOrder(gallery.dataset.album,ids),
@@ -194,15 +211,16 @@ function ageChart({child,periods},index,max){
       </button>`).join('')}</div>
   </div>`;
 }
-function dashboardView(){
+function statsView(){
   const story=familyStory(state);
   const max=story.artists.reduce((highest,artist)=>Math.max(highest,...artist.periods.map(([,count])=>count)),1);
   const charts=story.artists.map((artist,i)=>artist.periods.length?ageChart(artist,i,max):'').join('');
   return `<div class="dashboard family-story">
-    <header class="collection-summary">
-      <h1>${e(t('myCollection'))}</h1><p>${e(countText(story.count))}</p>
+    <header class="stats-intro"><h1>${e(t('statsHeadline'))}</h1></header>
+    <section class="collection-summary">
+      <h2>${e(t('myCollection'))}</h2><p>${e(countText(story.count))}</p>
       ${motif('ribbon','collection-pattern')}
-    </header>
+    </section>
     ${demoBanner()}${draftBanner()}
     ${story.artists.length?`<section class="dashboard-section"><h2>${e(t('littleArtists'))}</h2>
       <div class="artist-cards">${story.artists.map(({child,count},i)=>`
@@ -210,17 +228,17 @@ function dashboardView(){
           ${avatar(child)}<span><strong>${e(child.name)}</strong><small>${e(countText(count))}</small></span>${icon('chevron')}
         </button>`).join('')}</div></section>`:''}
     ${charts?`<section class="dashboard-section"><h2>${e(t('artByAge'))}</h2><div class="age-charts">${charts}</div></section>`:''}
-    ${story.sameAge?`<section class="dashboard-section"><h2>${e(t('atTheSameAge'))}</h2>
-      <div class="story-pair">${story.sameAge.map(entry=>storyPhoto(entry)).join('')}</div></section>`:''}
     ${story.timeline?`<section class="dashboard-section"><h2>${e(t('firstAndLast'))}</h2><p class="story-child">${e(story.timeline[0].child.name)}</p>
       <div class="story-pair">${storyPhoto(story.timeline[0],t('firstDrawing'))}${storyPhoto(story.timeline[1],t('latestDrawing'))}</div></section>`:''}
+    ${story.sameAge?`<section class="dashboard-section"><h2>${e(t('atTheSameAge'))}</h2>
+      <div class="story-pair">${story.sameAge.map(entry=>storyPhoto(entry)).join('')}</div></section>`:''}
   </div>`;
 }
 function draftBanner(){return drafts.length&&!demonstration?'<div class="draft-banner">'+button('drafts',t('resumeDraft')+' · '+drafts.length,'secondary','edit')+'</div>':'';}
 function demoBanner(){return demonstration?'<div class="demo-banner">'+icon('grid')+'<div><strong>'+e(t('demo'))+'</strong><span>'+e(t('demoHint'))+'</span></div>'+button('own',t('start'),'text-button')+'</div>':'';}
 function archiveHero(){
   const profiles=[{id:'',name:t('familyFilter')},...state.children];
-  return `<section class="archive-home"><div class="archive-home-heading"><h1>${e(t('archive'))}</h1>
+  return `<section class="archive-home"><div class="archive-home-heading"><h1>${e(t(page))}</h1>
       <div class="archive-pattern" aria-hidden="true">${motif('arcs','archive-arcs')}${motif('waves','archive-waves')}</div></div>
     <div class="child-tabs" role="group" aria-label="${e(t('profiles'))}">
       ${profiles.map(c=>button('filterChild',c.name,'child-tab '+(filters.child===c.id?'active':''),'',`data-id="${e(c.id)}" aria-pressed="${filters.child===c.id}"`)).join('')}
@@ -233,31 +251,34 @@ function workCard(w,action='detail',selected=false,disabled=false){
   return `<article class="work-card" data-ratio="${image.height/image.width}"><button class="work-open" data-action="${action}" ${action==='pick'?'aria-pressed="'+selected+'"':''} ${disabled?'disabled':''} data-id="${e(w.id)}" aria-label="${e(label[0])} · ${label[1]} ${e(label[2])}">
     <img loading="lazy" decoding="async" width="${image.width}" height="${image.height}" data-path="${e(coverPath(w))}" alt=""></button></article>`;
 }
-function emptyView(title,message,action,label,symbol='frame'){return '<div class="empty empty-'+symbol+'">'+decoration(symbol,'empty-art')+'<h2>'+e(title)+'</h2><p>'+e(message)+'</p>'+button(action,label,'primary',action==='clear'?'arrow':'plus')+'</div>';}
+function emptyView(title,message,action,label,symbol='frame',extra=''){return '<div class="empty empty-'+symbol+'">'+decoration(symbol,'empty-art')+'<h2>'+e(title)+'</h2><p>'+e(message)+'</p>'+button(action,label,'primary',action==='clear'||action==='nav'?'arrow':'plus',extra)+'</div>';}
 function hasArchiveFilters(){
   const defaults=archiveFilters();
   return Object.keys(defaults).some(key=>filters[key]!==defaults[key]);
 }
 function archiveResults(works){
   if(works.length)return '<div class="art-grid masonry">'+works.map(w=>workCard(w)).join('')+'</div>';
+  if(page==='favorites'&&!state.artworks.some(work=>work.isFavorite)){
+    return emptyView(t('emptyFavorites'),t('emptyFavoritesHint'),'nav',t('archive'),'heart','data-page="archive"');
+  }
   if(state.artworks.length)return emptyView(t('noMatches'),t('noMatchesHint'),'clear',t('clearFilters'),'search');
   if(!state.children.length)return emptyView(t('empty'),t('welcomeFirst'),'newChild',t('addFirstChild'),'frame');
   return emptyView(t('empty'),t('emptyHint'),'newWork',t('firstArtwork'),'frame');
 }
 function archiveView(){
-  const works=filterWorks(state,filters),years=[...new Set(state.artworks.filter(w=>validDate(w.artworkDate)).map(w=>w.artworkDate.slice(0,4)))].sort().reverse();
+  const works=galleryWorks(),years=[...new Set(state.artworks.filter(w=>validDate(w.artworkDate)).map(w=>w.artworkDate.slice(0,4)))].sort().reverse();
   const periods=new Set(dashboardData(state).periods.map(([period])=>period));
   if(filters.period!=='')periods.add(Number(filters.period));
   return archiveHero()+demoBanner()+draftBanner()+
   '<div class="archive-search"><div class="search">'+icon('search')+'<input id="search" value="'+e(filters.search)+'" aria-label="'+e(t('search'))+'" placeholder="'+e(t('search'))+'"></div></div>'+
-  '<details class="archive-options" '+(filtersExpanded?'open':'')+'><summary>'+icon('settings')+e(t('filters'))+'</summary><div class="filter-row"><div class="segmented">'+button('all',t('all'),!filters.favorite?'active':'')+button('favorites',t('favorites'),filters.favorite?'active':'','heart')+'</div><span class="spacer"></span><select id="year-filter" class="year-select" aria-label="'+e(t('anyYear'))+'">'+option('',t('anyYear'),filters.year)+years.map(y=>option(y,y,filters.year)).join('')+'</select></div>'+
+  '<details class="archive-options" '+(filtersExpanded?'open':'')+'><summary>'+icon('settings')+e(t('filters'))+'</summary><div class="filter-row"><div class="segmented">'+(page==='archive'?button('all',t('all'),!filters.favorite?'active':'')+button('favorites',t('favorites'),filters.favorite?'active':'','heart'):'')+'</div><span class="spacer"></span><select id="year-filter" class="year-select" aria-label="'+e(t('anyYear'))+'">'+option('',t('anyYear'),filters.year)+years.map(y=>option(y,y,filters.year)).join('')+'</select></div>'+
   '<div class="collection-label"><select id="sort" aria-label="'+e(t('newest'))+'">'+[['newest','newest'],['oldest','oldest'],['age','byAge'],['category','byCategory']].map(([id,key])=>option(id,t(key),filters.sort)).join('')+'</select></div>'+
   '<div class="category-chips">'+button('category',t('anyCategory'),'chip '+(!filters.category?'active':''),'','data-category=""')+categories.map(c=>button('category',t(c),'chip '+(filters.category===c?'active':''),'','data-category="'+c+'"')).join('')+'</div>'+
   '<div class="age-filter-row"><select id="period-filter" aria-label="'+e(t('ageCollections'))+'">'+option('',t('allAges'),filters.period)+[...periods].sort((a,b)=>a-b).map(n=>option(String(n),periodText(n),filters.period)).join('')+'</select>'+
   '</div></details>'+
   '<div class="collection-label archive-toolbar"><strong id="archive-count" aria-live="polite">'+e(countText(works.length))+'</strong>'+
   button('clear',t('clearFilters'),'text-button archive-reset','',hasArchiveFilters()?'':'hidden')+
-  (works.length?button('pickForAlbum',t('selectWorks'),'text-button'):'')+'</div><div id="archive-results">'+archiveResults(works)+'</div>';
+  button('pickForAlbum',t('selectWorks'),'text-button','',works.length?'':'hidden')+'</div><div id="archive-results">'+archiveResults(works)+'</div>';
 }
 function albumCover(album,{caption=false,previewWork=false}={}){
   const explicit=state.artworks.find(w=>w.id===album.coverArtworkId);
@@ -282,28 +303,36 @@ function albumsView(){
 function settingsView(){
   const language=(code,label)=>button('language',label,lang===code?'primary':'secondary','',
     'data-language="'+code+'" aria-pressed="'+(lang===code)+'"');
+  const designs=['classic','bright'].map(value=>`<button class="design-choice" data-action="design" data-theme="${value}"
+      aria-pressed="${theme===value}"><span class="design-preview preview-${value}" aria-hidden="true"></span>${e(t(value))}</button>`).join('');
   return `<header class="section-hero settings-intro"><h1>${e(t('settings'))}</h1></header>
     ${demoBanner()}<div class="settings-grid">
-      <section class="panel settings-profiles"><h2>${icon('photo')}${e(t('profiles'))}</h2>${motif('loop','settings-pattern')}
-      ${state.children.map(c=>`<div class="profile-row">${avatar(c)}<div>${e(c.name)}
-        ${c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':''}</div>
-        ${button('childPage',t('profile'),'text-button','','data-id="'+e(c.id)+'"')}</div>`).join('')}
-      ${button('newChild',t('addChild'),'secondary','plus')}</section>
-      <section class="panel settings-language"><h2>${icon('settings')}${e(t('language'))}</h2>${motif('checker','settings-pattern')}
-        <div class="language-options">${Object.entries(languages).map(([code,label])=>language(code,label)).join('')}</div></section>
-      <section class="panel settings-backup"><h2>${icon('download')}${e(t('backup'))}</h2>${motif('waves','settings-pattern')}
-        <div class="settings-actions">${button('export',t('exportBackup'),'secondary','download')}${button('import',t('importBackup'),'secondary','upload')}</div></section>
-      <aside class="warning backup-warning">${icon('lock')}<p>${e(t('backupWarning'))}</p></aside>
-      <section class="panel"><h2>${icon('album')}${e(t('pdf'))}</h2>
-        ${button('nav',t('albums'),'secondary','chevron','data-page="albums"')}</section>
-      <section class="panel storage-info"><h2>${icon('lock')}${e(t('privacyTitle'))}</h2>
-        <p>${e(t('appVersion'))}<br><code data-build>${e(buildVersion)}</code></p>
-        <details><summary>${e(t('local'))}</summary><p>${e(t('privacyBody'))}</p><p class="web-note">${e(t('webNote'))}</p></details>
-      </section>
+      <div class="settings-group">
+        <section class="panel settings-profiles"><h2>${icon('photo')}${e(t('profiles'))}</h2>${motif('loop','settings-pattern')}
+        ${state.children.map(c=>`<div class="profile-row">${avatar(c)}<div><strong>${e(c.name)}</strong>
+          ${c.birthDate?'<small>'+e(dateText(c.birthDate))+'</small>':''}</div>
+          ${button('childPage',t('profile'),'text-button','chevron','data-id="'+e(c.id)+'"')}</div>`).join('')}
+        ${button('newChild',t('addChild'),'secondary settings-cta','plus')}</section>
+        <section class="panel settings-language"><h2>${icon('settings')}${e(t('language'))}</h2>${motif('checker','settings-pattern')}
+          <div class="language-options">${Object.entries(languages).map(([code,label])=>language(code,label)).join('')}</div></section>
+        <section class="panel settings-design"><h2>${icon('palette')}${e(t('appDesign'))}</h2>
+          <div class="design-options" role="group" aria-label="${e(t('appDesign'))}">${designs}</div></section>
+      </div>
+      <div class="settings-group">
+        <section class="panel settings-pdf"><h2>${icon('album')}${e(t('pdf'))}</h2>
+          ${button('nav',t('albums'),'secondary settings-cta','chevron','data-page="albums"')}</section>
+        <section class="panel settings-backup"><h2>${icon('download')}${e(t('backup'))}</h2>${motif('waves','settings-pattern')}
+          <div class="settings-actions">${button('export',t('exportBackup'),'secondary','download')}${button('import',t('importBackup'),'secondary','upload')}</div></section>
+        <aside class="warning backup-warning">${icon('lock')}<p>${e(t('backupWarning'))}</p></aside>
+        <section class="panel storage-info"><h2>${icon('lock')}${e(t('privacyTitle'))}</h2>
+          <p>${e(t('appVersion'))}<br><code data-build>${e(buildVersion)}</code></p>
+          <details><summary>${e(t('local'))}</summary><p>${e(t('privacyBody'))}</p><p class="web-note">${e(t('webNote'))}</p></details>
+        </section>
+      </div>
     </div>`;
 }
-function openArchive(period='',child=''){clearTimeout(searchTimer);filters={...archiveFilters(),period,child};page='archive';section=null;render();window.scrollTo(0,0);}
-async function enterOwn(){demonstration=false;state=realState;page='home';filters=archiveFilters();clearURLs();render();if(!state.children.length)profileEditor();}
+function openArchive(period='',child='',target='archive'){clearTimeout(searchTimer);useGalleryFilters(target,{...archiveFilters(),period,child});page=target;section=null;render();window.scrollTo(0,0);}
+async function enterOwn(){demonstration=false;state=realState;galleries.favorites=archiveFilters();clearURLs();openArchive();if(!state.children.length)profileEditor();}
 
 function showSection(type,id){
   if(!modal.open&&!history.state?.archiveModal)rememberRoute();
@@ -376,7 +405,7 @@ function profileEditor(id){
         if(photo)puts.push([record.profileImagePath,photo]);
       }
       await persist(next,puts,deletes);
-      if(first){page='archive';rememberChild(record.id);}
+      if(first){page='archive';useGalleryFilters(page);rememberChild(record.id);}
       busy=false;closeModal(true);render();toast(t('profileSaved'));
     }catch(err){inlineError(t(storageErrorKey(err)));}finally{busy=false;}
   };
@@ -671,7 +700,7 @@ function addToAlbum(workIds){
       if(action==='newAlbum')albumEditor(null,ids);
     }});
 }
-function pickWorks(album=null){
+function pickWorks(album=null,onlyFavorites=false){
   const selected=new Set(),included=new Set(album?.orderedArtworkIds||[]);
   showModal(modalHeader(t('selectWorks'))+`<div class="modal-body">
     <label class="field">${e(t('search'))}<input id="pick-search" type="search"></label>
@@ -694,7 +723,7 @@ function pickWorks(album=null){
   function updateCount(){modal.querySelector('#pick-count').textContent=t('selectedWorks')+' · '+selected.size;
     modal.querySelector('[data-action=confirmPick]').disabled=!selected.size;}
   function paint(){
-    const works=filterWorks(state,{search:search.value,child:child.value});
+    const works=filterWorks(state,{search:search.value,child:child.value,favorite:onlyFavorites});
     modal.querySelector('#pick-grid').innerHTML=works.length?'<div class="art-grid masonry">'+works.map(w=>workCard(w,'pick',selected.has(w.id)||included.has(w.id),included.has(w.id))).join('')+'</div>':e(t('noMatches'));
     updateCount();hydrate(modal);
   }
@@ -754,7 +783,7 @@ app.onclick=async event=>{
   try{
     if(busy)return;
     const action=el.dataset.action;
-    if(action==='nav'&&(section||page!==el.dataset.page)){rememberRoute();section=null;page=el.dataset.page;render();window.scrollTo(0,0);pushRoute();}
+    if(action==='nav'&&(section||page!==el.dataset.page)){clearTimeout(searchTimer);rememberRoute();section=null;page=el.dataset.page;if(isGallery())useGalleryFilters(page);render();window.scrollTo(0,0);pushRoute();}
     if(action==='openArchive')openArchive();
     if(action==='openPeriod'||action==='openChildArchive'){
       rememberRoute();openArchive(el.dataset.period||'',el.dataset.id);pushRoute();
@@ -765,14 +794,19 @@ app.onclick=async event=>{
       if(demonstration&&previous!==lang)localizeDemo(previous);
       render();
     }
-    if(action==='filterChild'){filters.child=el.dataset.id;page='archive';section=null;render();}
+    if(action==='design'){
+      theme=el.dataset.theme==='classic'?'classic':'bright';
+      try{localStorage.setItem(themeKey,theme);}catch{}
+      render();app.querySelector('[data-action="design"][data-theme="'+theme+'"]')?.focus({preventScroll:true});
+    }
+    if(action==='filterChild'){filters.child=el.dataset.id;render();}
     if(action==='all'||action==='favorites'){filters.favorite=action==='favorites';render();}
     if(action==='category'){filters.category=el.dataset.category;render();}
-    if(action==='clear')openArchive();
+    if(action==='clear')openArchive('','',page);
     if(action==='own')await enterOwn();
     if(action==='demo'){
       busy=true;
-      try{const sample=await makeDemo();clearURLs();demonstration=true;state=sample;page='home';filters=archiveFilters();render();}
+      try{const sample=await makeDemo();clearURLs();demonstration=true;state=sample;galleries.favorites=archiveFilters();openArchive();}
       finally{busy=false;}
     }
     if(action==='newChild'){if(demonstration)await enterOwn();else profileEditor();}
@@ -792,7 +826,7 @@ app.onclick=async event=>{
       busy=true;try{const next=structuredClone(state);next.albums=next.albums.filter(a=>a.id!==section.id);
         await persist(next);section=null;render();}finally{busy=false;}
     }
-    if(action==='pickForAlbum')pickWorks();
+    if(action==='pickForAlbum')pickWorks(null,page==='favorites');
     if(action==='newWork')await artworkEditor();
     if(action==='drafts')await showDrafts();
     if(action==='detail')await artworkDetail(el.dataset.id);
@@ -811,11 +845,12 @@ app.oninput=event=>{
   filters.search=event.target.value;
   clearTimeout(searchTimer);
   searchTimer=setTimeout(()=>{
-    if(page!=='archive')return;
-    const works=filterWorks(state,filters);
+    if(!isGallery()||section)return;
+    const works=galleryWorks();
     app.querySelector('#archive-count').textContent=countText(works.length);
     app.querySelector('#archive-results').innerHTML=archiveResults(works);
     app.querySelector('.archive-reset').hidden=!hasArchiveFilters();
+    app.querySelector('.archive-toolbar [data-action="pickForAlbum"]').hidden=!works.length;
     hydrate();
   },180);
 };

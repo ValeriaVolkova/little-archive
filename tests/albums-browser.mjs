@@ -3,7 +3,7 @@ import {join} from 'node:path';
 
 export async function checkAlbums(page,url,output,chromium){
   const click=(action,root=page)=>root.locator('[data-action="'+action+'"]:visible').first().click();
-  const nav=name=>page.locator('.mobile-nav [data-page="'+name+'"]').click();
+  const nav=name=>page.locator(name==='settings'?'.app-tools .settings-shortcut':'.mobile-nav [data-page="'+name+'"]').click();
   const form=page.locator('#album-form');
   const metadata=()=>page.evaluate(async()=>(await import('/db.js')).readArchive());
   const files=()=>page.evaluate(async()=>{
