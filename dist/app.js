@@ -102,10 +102,10 @@ function hydrate(root=app){
 let imagesById=new Map();
 function coverPath(work){const image=imagesById.get(work?.coverImageId);return image?image.originalPath+'.thumb':'';}
 function childLabel(id,date){const child=state.children.find(c=>c.id===id);return child?e(child.name)+(date&&ageText(ageAt(child.birthDate,date))?' · '+e(ageText(ageAt(child.birthDate,date))):''):'';}
-async function persist(next,puts=[],deletes=[],draft=null,missingOriginals=[]){
+async function persist(next,puts=[],deletes=[],draft=null,restore=null){
   if(stale&&!demonstration)throw Error(t('syncNotice'));
   if(demonstration){validateArchive(next);for(const[key,blob]of puts)demoFiles.set(key,blob);for(const key of deletes)demoFiles.delete(key);}
-  else{await commit(next,puts,deletes,draft,missingOriginals);realState=next;}
+  else{await commit(next,puts,deletes,draft,restore);realState=next;}
   state=next;clearURLs();
 }
 function closeModal(force=false){
@@ -734,10 +734,12 @@ async function importBackup(file){
     showModal(modalHeader(t('importBackup'))+'<div class="modal-body"><h3>'+e(countText(incoming.artworks.length))+'</h3><p class="help">'+e(t('importConfirm'))+'</p></div><div class="modal-footer">'+button('close',t('cancel'))+button('merge',t('merge'),'primary')+'</div>',{narrow:true,action:async action=>{
       if(action!=='merge'||busy)return;busy=true;
       try{
-        const {archive:next,puts,missingOriginals}=planRestore(demonstration?realState:state,incoming,verifiedFiles);
-        if(demonstration){await commit(next,puts,[],null,missingOriginals);demonstration=false;state=realState=next;clearURLs();}
-        else await persist(next,puts,[],null,missingOriginals);
-        busy=false;closeModal(true);openArchive();toast(t('imported'));
+        const {archive:next,puts,restore,skippedEdits}=await planRestore(demonstration?realState:state,incoming,verifiedFiles);
+        if(demonstration){await commit(next,puts,[],null,restore);demonstration=false;state=realState=next;clearURLs();}
+        else await persist(next,puts,[],null,restore);
+        busy=false;closeModal(true);openArchive();
+        if(skippedEdits)showModal(modalHeader(t('importBackup'))+'<div class="modal-body"><p>'+e(t('restoreSkipped').replace('{count}',String(skippedEdits)))+'</p></div>',{narrow:true});
+        else toast(t('imported'));
       }catch{inlineError(t('restoreFailed'));}finally{busy=false;}
     }});
   }catch(error){busy=false;showModal(modalHeader(t('error'))+'<div class="modal-body"><p class="help" role="alert">'+e(t(error instanceof BackupLimitError?'restoreTooLarge':'invalidBackup'))+'</p></div>',{narrow:true});}

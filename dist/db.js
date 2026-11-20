@@ -51,24 +51,19 @@ export async function readArchive(){
   }finally{db.close();}
 }
 export async function readFile(path){const db=await openDB();return new Promise((resolve,reject)=>{const req=db.transaction('files').objectStore('files').get(path);req.onsuccess=()=>{try{req.result?resolve(decodeImage(req.result)):reject(Error('Missing original image'));}catch(error){reject(error);}};req.onerror=()=>reject(req.error);});}
-function findMissingFiles(db,candidates){
-  if(!candidates.length)return Promise.resolve([]);
+// Keep a storage read failure distinct from an absent key or a broken codec record.
+export async function readStoredFile(path){
+  const db=await openDB();
   return new Promise((resolve,reject)=>{
-    const tx=db.transaction('files'),files=tx.objectStore('files'),missing=[];
-    for(const entry of candidates){
-      const req=files.getKey(entry[0]);
-      req.onsuccess=()=>{if(req.result===undefined)missing.push(entry);};
-    }
-    tx.oncomplete=()=>resolve(missing);
-    tx.onabort=tx.onerror=()=>reject(tx.error||Error('Could not check backup files'));
+    const tx=db.transaction('files'),req=tx.objectStore('files').get(path);
+    tx.oncomplete=()=>resolve(req.result);
+    tx.onabort=()=>reject(tx.error||Error('Could not read local file'));
   });
 }
-export async function commit(state,puts=[],deletes=[],draft=null,missingOriginals=[]){
+export async function commit(state,puts=[],deletes=[],draft=null,restore=null){
   validateArchive(state,{allowInvalidDates:true});
   const db=await openDB();
   const encoded=[];for(const [key,blob] of puts)encoded.push([key,await encodeImage(blob)]);
-  const repairs=[];
-  for(const [key,blob] of await findMissingFiles(db,missingOriginals))repairs.push([key,await encodeImage(blob)]);
   return new Promise((resolve,reject)=>{
     const tx=db.transaction(['metadata','files'],'readwrite');
     let failure;
@@ -76,18 +71,24 @@ export async function commit(state,puts=[],deletes=[],draft=null,missingOriginal
     const req=tx.objectStore('metadata').get('archive');
     req.onsuccess=()=>{
       if((req.result?.revision||0)!==revision){failure=Error('Archive changed in another tab. Reload before saving.');tx.abort();return;}
+      if(restore&&!restore.metadataChanged&&!encoded.length)return;
       if(draft){const check=tx.objectStore('metadata').get('draft:'+draft.id);check.onsuccess=()=>{if((check.result?.revision||0)!==draft.revision){failure=Error('Draft changed in another tab');tx.abort();}else tx.objectStore('metadata').delete('draft:'+draft.id);};}
       tx.objectStore('metadata').put({...state,revision:revision+1},'archive');
       const files=tx.objectStore('files');
-      for(const [key,blob] of encoded)files.put(blob,key);
-      for(const key of deletes)files.delete(key);
-      for(const [key,blob] of repairs){
-        const existing=files.getKey(key);
-        existing.onsuccess=()=>{if(existing.result===undefined)files.add(blob,key);};
+      for(const [key,blob] of encoded){
+        if(restore?.newPaths.has(key))files.add(blob,key);
+        else files.put(blob,key);
       }
+      for(const key of deletes)files.delete(key);
     };
-    tx.oncomplete=()=>{state.revision=revision+1;if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel('little-archive');channel.postMessage({source:clientId});channel.close();}resolve();};
-    tx.onabort=tx.onerror=()=>reject(failure||tx.error||Error('Storage transaction failed'));
+    tx.oncomplete=()=>{
+      if(!restore||restore.metadataChanged||encoded.length){
+        state.revision=revision+1;
+        if(typeof BroadcastChannel!=='undefined'){const channel=new BroadcastChannel('little-archive');channel.postMessage({source:clientId});channel.close();}
+      }
+      resolve();
+    };
+    tx.onabort=()=>reject(failure||tx.error||Error('Storage transaction failed'));
   });
 }
 export async function readDrafts(){

@@ -1,6 +1,9 @@
 import {mergeArchives,validateArchive,profilePhoto} from './domain.js';
 import {loadImage,raster} from './media.js';
 import {checkZipLimit,readZip,writeZip} from './zip.js';
+import {readStoredFile} from './db.js';
+import {decodeImage} from './storage-codec.js';
+import {validRecipe} from './crop-editor.js';
 
 export class BackupPhotoError extends Error {
   constructor(owner,cause){
@@ -65,49 +68,116 @@ export async function inspectBackup(file,onProgress=()=>{}){
   const manifest=JSON.parse(await manifestBlob.text());
   if(manifest.format!=='little-archive'||manifest.formatVersion!==1)throw Error('Unknown format');
   const incoming=validateArchive(manifest.archive,{allowInvalidDates:true}),verifiedFiles=new Map();
+  const unchecked=new Set(zip.names);
+  unchecked.delete('manifest.json');
+  async function checkPhoto(path){
+    const photo=await readablePhoto(path,await zip.get(path));
+    verifiedFiles.set(path,photo);
+    unchecked.delete(path);
+  }
   for(const child of incoming.children){
     const path=profilePhoto(child);
     if(path){
-      verifiedFiles.set(path,await readablePhoto(path,await zip.get(path)));
+      await checkPhoto(path);
     }
   }
   let done=0;
   for(const image of incoming.images){
     for(const path of [image.originalPath,image.editedPath].filter(Boolean)){
-      verifiedFiles.set(path,await readablePhoto(path,await zip.get(path)));
+      await checkPhoto(path);
     }
     const display=verifiedFiles.get(image.editedPath||image.originalPath);
     verifiedFiles.set(image.originalPath+'.thumb',(await raster(display,640,0,null,image.autoEnhance===true)).blob);
     onProgress(++done,incoming.images.length);
   }
+  // Extra v1 entries are not imported, but their checksums still matter.
+  for(const path of unchecked)await zip.get(path);
   return {incoming,verifiedFiles};
 }
 
-// A verified backup may fill a missing original only for the same image,
-// artwork and path. Existing metadata, album order and files take precedence.
-export function planRestore(current,incoming,verifiedFiles){
+async function localPhoto(path){
+  const record=await readStoredFile(path);
+  if(record===undefined)return null;
+  let blob;
+  try{blob=decodeImage(record);}
+  catch(error){if(error instanceof TypeError)return null;throw error;}
+  if(!blob.size)return null;
+  try{return await readablePhoto(path,blob);}
+  catch(error){
+    // Unexpected I/O, module loading and resource errors abort the operation.
+    if(error.message==='Invalid image'||error==='HEIF image not found'||error==='HEIF processing error')return null;
+    throw error;
+  }
+}
+
+async function sameBytes(a,b){
+  if(a===b)return true;
+  if(a.size!==b.size)return false;
+  const chunk=256*1024;
+  for(let i=0;i<a.size;i+=chunk){
+    const left=new Uint8Array(await a.slice(i,i+chunk).arrayBuffer());
+    const right=new Uint8Array(await b.slice(i,i+chunk).arrayBuffer());
+    if(!left.every((byte,index)=>byte===right[index]))return false;
+  }
+  return true;
+}
+
+function sameEdit(current,backup){
+  return current.editedPath===backup.editedPath&&current.width===backup.width&&current.height===backup.height&&
+    validRecipe(current.cropSettings)&&validRecipe(backup.cropSettings)&&
+    ['x','y','w','h','rotation'].every(key=>current.cropSettings[key]===backup.cropSettings[key]);
+}
+
+export async function planRestore(current,incoming,verifiedFiles){
   const archive=mergeArchives(current,incoming);
   const existing=new Map(current.images.map(image=>[image.id,image]));
   const incomingById=new Map(incoming.images.map(image=>[image.id,image]));
-  const puts=[],missingOriginals=[];
+  const puts=[],newPaths=new Set();
+  let skippedEdits=0;
+  function addNew(path){
+    newPaths.add(path);
+    puts.push([path,verifiedFiles.get(path)]);
+  }
+  async function repair(path){
+    const local=await localPhoto(path);
+    if(local)return local;
+    const replacement=verifiedFiles.get(path);
+    puts.push([path,replacement]);
+    return replacement;
+  }
   for(const child of incoming.children){
     const path=profilePhoto(child),old=current.children.find(c=>c.id===child.id);
     if(!path)continue;
-    if(!old)puts.push([path,verifiedFiles.get(path)]);
-    else if(profilePhoto(old)===path)missingOriginals.push([path,verifiedFiles.get(path)]);
+    if(!old)addNew(path);
+    else if(profilePhoto(old)===path)await repair(path);
   }
   for(const image of archive.images){
     const old=existing.get(image.id);
     if(!old){
       for(const path of [image.originalPath,image.editedPath,image.originalPath+'.thumb'].filter(Boolean)){
-        puts.push([path,verifiedFiles.get(path)]);
+        addNew(path);
       }
       continue;
     }
     const backup=incomingById.get(image.id);
     if(backup?.artworkId===old.artworkId&&backup.originalPath===old.originalPath){
-      missingOriginals.push([old.originalPath,verifiedFiles.get(old.originalPath)]);
+      const original=await repair(old.originalPath);
+      let display=original;
+      if(old.editedPath){
+        display=await localPhoto(old.editedPath);
+        if(!display){
+          if(!sameEdit(old,backup)||!await sameBytes(original,verifiedFiles.get(old.originalPath))){
+            skippedEdits++;
+            continue;
+          }
+          display=verifiedFiles.get(old.editedPath);
+          puts.push([old.editedPath,display]);
+        }
+      }
+      const thumb=old.originalPath+'.thumb';
+      if(!await localPhoto(thumb))puts.push([thumb,(await raster(display,640,0,null,old.autoEnhance===true)).blob]);
     }
   }
-  return {archive,puts,missingOriginals};
+  const metadataChanged=['children','artworks','images','albums'].some(key=>archive[key].length!==current[key].length);
+  return {archive,puts,restore:{newPaths,metadataChanged},skippedEdits};
 }

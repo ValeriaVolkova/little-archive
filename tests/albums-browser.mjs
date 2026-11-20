@@ -191,7 +191,7 @@ export async function checkAlbums(page,url,output,chromium){
       const file=new Blob([Uint8Array.from(atob(data.split(',')[1]),c=>c.charCodeAt(0))]);
       const {incoming,verifiedFiles}=await inspectBackup(file);
       const current=await readArchive();if(current.children.length)throw Error('Destination must be empty');
-      const plan=planRestore(current,incoming,verifiedFiles);await commit(plan.archive,plan.puts);
+      const plan=await planRestore(current,incoming,verifiedFiles);await commit(plan.archive,plan.puts,[],null,plan.restore);
       const archive=await readArchive();
       for(const c of archive.children.filter(c=>c.profileImagePath)){
         const photo=await readFile(c.profileImagePath);if(!photo.size)throw Error('Missing avatar');

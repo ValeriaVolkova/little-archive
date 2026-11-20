@@ -121,7 +121,7 @@ try{
       const {incoming,verifiedFiles}=await inspectBackup(new Blob([Uint8Array.from(bytes)]));
       const destination=await readArchive();
       if(destination.children.length)throw Error('Expected empty restore profile');
-      const plan=planRestore(destination,incoming,verifiedFiles);await commit(plan.archive,plan.puts);
+      const plan=await planRestore(destination,incoming,verifiedFiles);await commit(plan.archive,plan.puts,[],null,plan.restore);
       return true;
     },oldZip);
     assert.ok(restored);

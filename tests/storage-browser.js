@@ -101,13 +101,13 @@ async function run(){
   equal(incoming,{...state,revision:undefined},'Backup omitted metadata');
   for(const path of originals)equal(await bytes(verifiedFiles.get(path)),expected,'ZIP changed original bytes');
   const destination={version:1,children:[],artworks:[],images:[],albums:[]};
-  const fresh=planRestore(destination,incoming,verifiedFiles);
+  const fresh=await planRestore(destination,incoming,verifiedFiles);
   equal(fresh.archive,incoming,'Empty archive restore lost metadata');
-  assert(fresh.puts.length===6&&fresh.missingOriginals.length===0,'Empty restore omitted originals or previews');
+  assert(fresh.puts.length===6&&fresh.restore.newPaths.size===6,'Empty restore omitted originals or previews');
   passed.push('ZIP v1 round trip includes all photos and preserves archive metadata');
 
   // Fault injection only in this throwaway browser profile.
-  const distinct=new Blob(['existing bytes'],{type:'image/png'});
+  const distinct=await makeImage('image/png',9,7);
   await change(db,['files'],tx=>{
     tx.objectStore('files').delete(originals[1]);
   });
@@ -138,15 +138,15 @@ async function run(){
   const edited=await readArchive();
   edited.artworks[0].title='Локальное изменение';
   await commit(edited);
-  const repair=planRestore(edited,incoming,verifiedFiles);
-  await commit(repair.archive,repair.puts,[],null,repair.missingOriginals);
+  const repair=await planRestore(edited,incoming,verifiedFiles);
+  await commit(repair.archive,repair.puts,[],null,repair.restore);
   equal(await bytes(await readFile(originals[1])),expected,'Matching missing original was not restored');
-  equal(await (await readFile(originals[0])).text(),'existing bytes','Restore overwrote an existing file');
+  equal(await bytes(await readFile(originals[0])),await bytes(distinct),'Restore overwrote an existing file');
   equal((await readArchive()).artworks[0].title,'Локальное изменение','Restore overwrote metadata');
   const afterRepair=await readArchive();
-  const again=planRestore(afterRepair,incoming,verifiedFiles);
-  await commit(again.archive,again.puts,[],null,again.missingOriginals);
-  equal(await readArchive(),{...afterRepair,revision:afterRepair.revision+1},'Repeated restore changed archive content');
+  const again=await planRestore(afterRepair,incoming,verifiedFiles);
+  await commit(again.archive,again.puts,[],null,again.restore);
+  equal(await readArchive(),afterRepair,'Repeated restore changed archive content');
   passed.push('Restore repairs absent originals and preserves existing files and metadata');
 
   const invalidDbValue={version:99};
@@ -161,7 +161,7 @@ async function run(){
     tx.objectStore('metadata').delete('archive');
     tx.objectStore('files').clear();
   });
-  await commit(fresh.archive,fresh.puts);
+  await commit(fresh.archive,fresh.puts,[],null,fresh.restore);
   equal(await readArchive(),{...incoming,revision:1},'Full restore changed metadata');
   for(const path of originals)equal(await bytes(await readFile(path)),expected,'Full restore lost an original');
   passed.push('Full restore into empty test storage saves every original and record');
@@ -169,7 +169,92 @@ async function run(){
   await checkExportRefusal(db);
   await checkUnreadableExport(db,photo);
   await checkUnreadableAvatar();
+  await checkRepairTransactions(db);
   await report({passed});
+}
+
+async function checkRepairTransactions(db){
+  const local=structuredClone(state),image=local.images[0];
+  local.revision=(await readArchive()).revision;
+  const edit=image.editedPath='images/one/edited.jpg',thumb=image.originalPath+'.thumb';
+  image.cropSettings={x:0,y:0,w:0.5,h:1,rotation:0};
+  const png=await makeImage('image/png'),jpeg=await makeImage('image/jpeg');
+  const distinct=await makeImage('image/png',14,18);
+  await commit(local,[...originals.map(path=>[path,png]),[edit,jpeg]]);
+  const zip=await createBackup(local,readFile);
+  const {incoming,verifiedFiles}=await inspectBackup(zip);
+  const plan=async()=>planRestore(await readArchive(),incoming,verifiedFiles);
+  const apply=p=>commit(p.archive,p.puts,[],null,p.restore);
+  const keys=()=>request(db.transaction('files').objectStore('files').getAllKeys());
+  const snapshot=async()=>{
+    const files=[];
+    for(const key of await keys())files.push([key,await bytes(await readFile(key))]);
+    return {archive:await readArchive(),files};
+  };
+  const current=await readArchive();
+  current.artworks[0].title='Newer';current.artworks[0].notes='Keep this note';
+  current.artworks[0].artworkDate='2025-02-01';
+  current.albums[0].title='My current album';
+  current.artworks[0].childId=current.children[1].id;
+  current.albums[0].childId=null;
+  current.albums[0].orderedArtworkIds=[current.artworks[1].id,current.artworks[0].id];
+  current.images[0].autoEnhance=true;
+  await commit(current,[[originals[2],distinct]]);
+  for(const bad of [null,new Blob(),new Blob(['not a photo'])]){
+    await change(db,['files'],tx=>{
+      const files=tx.objectStore('files');
+      for(const path of [originals[0],edit,thumb])bad===null?files.delete(path):files.put(bad,path);
+    });
+    const before=await snapshot(),p=await plan();
+    if(bad===null){
+      // Abort after an actual file write succeeds, before the multi-store transaction commits.
+      const put=IDBObjectStore.prototype.put;let injected=false;
+      IDBObjectStore.prototype.put=function(...args){
+        const req=put.apply(this,args);
+        if(this.name==='files'&&args[1]===edit){
+          req.addEventListener('success',()=>{injected=true;this.transaction.abort();});
+        }
+        return req;
+      };
+      let failed=false;
+      try{await apply(p);}catch{failed=true;}finally{IDBObjectStore.prototype.put=put;}
+      assert(failed&&injected,'Expected an interrupted write');
+      equal(await snapshot(),before,'Aborted transaction left partial files or metadata');
+    }
+    await apply(await plan());
+    equal(await readArchive(),{...before.archive,revision:before.archive.revision+1},'Restore discarded local metadata');
+    equal(await bytes(await readFile(originals[0])),await bytes(png),'Original repair failed');
+    equal(await bytes(await readFile(edit)),await bytes(jpeg),'Edited repair failed');
+    equal(await bytes(await readFile(originals[2])),await bytes(distinct),'Healthy original was overwritten');
+    const fixed=await snapshot(),again=await plan();
+    equal(again.puts.length,0,'Healthy file scheduled for rewrite');
+    await apply(again);equal(await snapshot(),fixed,'Repeated restore changed keys, bytes or revision');
+  }
+  // Same names in the ZIP are insufficient: both the source bytes and recipe must match.
+  await change(db,['files'],tx=>tx.objectStore('files').delete(edit));
+  const different=await readArchive();
+  await commit(different,[[originals[0],distinct]]);
+  equal((await plan()).skippedEdits,1,'Restored pixels derived from another original');
+  different.images[0].cropSettings.rotation=90;
+  await commit(different,[[originals[0],png]]);
+  const untouched=await snapshot(),mismatch=await plan();
+  equal(mismatch.skippedEdits,1,'Unreported crop mismatch');
+  await apply(mismatch);equal(await snapshot(),untouched,'Older crop replaced newer settings');
+  const readableEdit=await makeImage('image/jpeg',12,11);
+  await commit(different,[[edit,readableEdit]]);
+  const newer=await snapshot();
+  let staleRejected=false;
+  try{await apply(mismatch);}catch{staleRejected=true;}
+  assert(staleRejected,'Stale restore accepted a newer revision');
+  const keep=await plan();
+  assert(!keep.puts.length&&!keep.skippedEdits,'Readable newer edit was scheduled for repair');
+  await apply(keep);equal(await snapshot(),newer,'Healthy newer edit or album order changed');
+  const brokenZip=zip.slice(0,-1);
+  let rejected=false;
+  try{await inspectBackup(brokenZip);}catch{rejected=true;}
+  assert(rejected,'Truncated ZIP passed inspection');
+  equal(await snapshot(),newer,'Invalid ZIP changed the collection');
+  passed.push('File repairs are atomic, retryable and idempotent for absent, empty and damaged files; newer edits and healthy originals survive');
 }
 
 async function checkEmptyRestoreRefusal(db){
@@ -486,7 +571,7 @@ async function checkPhaseTwo(db,photo,expected){
   const pdfLoaded=new Promise((resolve,reject)=>{library.onload=resolve;library.onerror=reject;});
   document.head.append(library);await pdfLoaded;
   const {createPDF}=await import(base+'pdf.js');
-  const restorePlan=planRestore({version:1,children:[],artworks:[],images:[],albums:[]},newBackup.incoming,newBackup.verifiedFiles);
+  const restorePlan=await planRestore({version:1,children:[],artworks:[],images:[],albums:[]},newBackup.incoming,newBackup.verifiedFiles);
   const restoredFiles=new Map(restorePlan.puts);
   equal(await bytes(restoredFiles.get(cropped.originalPath)),await bytes(replacement),'Restore plan lost original');
   assert(restoredFiles.has(cropped.originalPath+'.thumb'),'Restore omitted gallery thumbnail');
@@ -539,8 +624,15 @@ async function checkPhaseTwo(db,photo,expected){
   assert(firstState.children.length===1&&firstState.artworks.length===0,'Onboarding mixed demo records into the archive');
   passed.push('First opening starts on Archive, central Add creates the first profile, and empty Home has no invented data');
   first.remove();
-  const merge=planRestore(firstState,newBackup.incoming,newBackup.verifiedFiles);
-  await commit(merge.archive,merge.puts,[],null,merge.missingOriginals);
+  const merge=await planRestore(firstState,newBackup.incoming,newBackup.verifiedFiles);
+  // This fixture removed only metadata. Existing unowned file keys must
+  // abort the import rather than be overwritten by newly introduced records.
+  let conflict;
+  try{await commit(merge.archive,merge.puts,[],null,merge.restore);}catch(error){conflict=error;}
+  assert(conflict?.name==='ConstraintError','Unowned file collision did not abort');
+  equal(await readArchive(),firstState,'File collision committed partial metadata');
+  await change(db,['files'],tx=>tx.objectStore('files').clear());
+  await commit(merge.archive,merge.puts,[],null,merge.restore);
   const stored=(await readArchive()).images.find(i=>i.id===cropped.id);
   assert(stored.autoEnhance===true,'ZIP restore lost the enabled state');
   equal(stored.cropSettings,cropped.cropSettings,'Restore transaction lost recipe');

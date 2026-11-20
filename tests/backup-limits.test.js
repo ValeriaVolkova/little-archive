@@ -7,6 +7,15 @@ import {BackupLimitError,zipLimits,readZip,writeZip} from '../dist/zip.js';
 const limitError=limit=>error=>error instanceof BackupLimitError&&error.limit===limit;
 const noFile=()=>assert.fail('Export read an unexpected image');
 
+test('inspection checks CRC of unreferenced entries before offering restore',async()=>{
+  const base=await readZip(await createBackup(emptyArchive(),noFile));
+  const extra='extra.txt',payload='extra payload';
+  const blob=await writeZip([[extra,new Blob([payload])],['manifest.json',await base.get('manifest.json')]]);
+  const raw=new Uint8Array(await blob.arrayBuffer());
+  raw[30+extra.length]^=1;
+  await assert.rejects(inspectBackup(new Blob([raw])),/checksum/);
+});
+
 test('an unnamed profile with a corrupt avatar is identified by ID before any file read',async()=>{
   const path='profiles/child/avatar.jpg';
   const files=new Map([[path,new Blob([Uint8Array.of(1,2,3)],{type:'image/jpeg'})]]);
